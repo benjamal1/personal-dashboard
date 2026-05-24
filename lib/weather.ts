@@ -6,18 +6,18 @@ export type LocalWeather = {
   windSpeed: number;
 };
 
+export type WeatherLocation = {
+  city: string;
+  latitude: number;
+  longitude: number;
+};
+
 type FetchResponse = {
   ok: boolean;
   json: () => Promise<unknown>;
 };
 
 type FetchLike = (input: string) => Promise<FetchResponse>;
-
-type LocationPayload = {
-  latitude: number;
-  longitude: number;
-  city: string;
-};
 
 type ForecastPayload = {
   current: {
@@ -83,18 +83,24 @@ function createForecastUrl(latitude: number, longitude: number) {
   return `https://api.open-meteo.com/v1/forecast?${searchParams.toString()}`;
 }
 
-export async function fetchLocalWeather(
-  fetcher: FetchLike = (input) => fetch(input)
-): Promise<LocalWeather> {
-  const locationResponse = await fetcher("https://ipapi.co/json/");
+export function getConfiguredWeatherLocation(): WeatherLocation {
+  return {
+    city: process.env.NEXT_PUBLIC_WEATHER_CITY || "Cleveland",
+    latitude: Number(process.env.NEXT_PUBLIC_WEATHER_LATITUDE || 41.4993),
+    longitude: Number(process.env.NEXT_PUBLIC_WEATHER_LONGITUDE || -81.6944)
+  };
+}
 
-  if (!locationResponse.ok) {
-    throw new Error("Location lookup failed");
+export async function fetchLocalWeather(
+  fetcher: FetchLike = (input) => fetch(input),
+  location = getConfiguredWeatherLocation()
+): Promise<LocalWeather> {
+  if (!Number.isFinite(location.latitude) || !Number.isFinite(location.longitude)) {
+    throw new Error("Weather location is invalid");
   }
 
-  const locationPayload = (await locationResponse.json()) as LocationPayload;
   const forecastResponse = await fetcher(
-    createForecastUrl(locationPayload.latitude, locationPayload.longitude)
+    createForecastUrl(location.latitude, location.longitude)
   );
 
   if (!forecastResponse.ok) {
@@ -104,7 +110,7 @@ export async function fetchLocalWeather(
   const forecastPayload = (await forecastResponse.json()) as ForecastPayload;
 
   return {
-    city: locationPayload.city,
+    city: location.city,
     condition: getWeatherDescription(forecastPayload.current.weathercode),
     temperature: forecastPayload.current.temperature_2m,
     weatherCode: forecastPayload.current.weathercode,

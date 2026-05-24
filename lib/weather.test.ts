@@ -18,29 +18,25 @@ describe("getWeatherDescription", () => {
 });
 
 describe("fetchLocalWeather", () => {
-  it("fetches location first, then weather data for that location", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          latitude: 39.9526,
-          longitude: -75.1652,
-          city: "Philadelphia"
-        })
+  it("fetches weather for the configured location", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        current: {
+          temperature_2m: 72.4,
+          weathercode: 3,
+          windspeed_10m: 9.8
+        }
       })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          current: {
-            temperature_2m: 72.4,
-            weathercode: 3,
-            windspeed_10m: 9.8
-          }
-        })
-      });
+    });
 
-    await expect(fetchLocalWeather(fetchMock)).resolves.toEqual({
+    await expect(
+      fetchLocalWeather(fetchMock, {
+        latitude: 39.9526,
+        longitude: -75.1652,
+        city: "Philadelphia"
+      })
+    ).resolves.toEqual({
       city: "Philadelphia",
       condition: "Partly cloudy",
       temperature: 72.4,
@@ -48,20 +44,24 @@ describe("fetchLocalWeather", () => {
       windSpeed: 9.8
     });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "https://ipapi.co/json/");
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
+    expect(fetchMock).toHaveBeenCalledWith(
       "https://api.open-meteo.com/v1/forecast?latitude=39.9526&longitude=-75.1652&current=temperature_2m%2Cweathercode%2Cwindspeed_10m&temperature_unit=fahrenheit&windspeed_unit=mph"
     );
   });
 
-  it("throws when the location request fails", async () => {
+  it("throws when the weather request fails", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: false
     });
 
-    await expect(fetchLocalWeather(fetchMock)).rejects.toThrow(
-      "Location lookup failed"
+    await expect(
+      fetchLocalWeather(fetchMock, {
+        latitude: 39.9526,
+        longitude: -75.1652,
+        city: "Philadelphia"
+      })
+    ).rejects.toThrow(
+      "Weather lookup failed"
     );
   });
 });

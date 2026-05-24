@@ -14,6 +14,8 @@ import {
 
 import { fetchLocalWeather, type LocalWeather } from "@/lib/weather";
 
+const WEATHER_CACHE_KEY = "personal-dashboard.weather";
+
 type WeatherState =
   | {
       status: "loading";
@@ -73,6 +75,8 @@ export default function Weather() {
       try {
         const weather = await fetchLocalWeather();
 
+        window.localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(weather));
+
         if (!cancelled) {
           setState({
             status: "success",
@@ -80,11 +84,20 @@ export default function Weather() {
           });
         }
       } catch {
+        const cachedWeather = readCachedWeather();
+
         if (!cancelled) {
-          setState({
-            status: "error",
-            weather: null
-          });
+          setState(
+            cachedWeather
+              ? {
+                  status: "success",
+                  weather: cachedWeather
+                }
+              : {
+                  status: "error",
+                  weather: null
+                }
+          );
         }
       }
     };
@@ -142,4 +155,25 @@ export default function Weather() {
       <p className="mt-2 text-xs font-light text-zinc-700">{Math.round(windSpeed)} mph</p>
     </section>
   );
+}
+
+function readCachedWeather() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(WEATHER_CACHE_KEY) || "null") as LocalWeather | null;
+
+    if (
+      parsed &&
+      typeof parsed.city === "string" &&
+      typeof parsed.condition === "string" &&
+      typeof parsed.temperature === "number" &&
+      typeof parsed.weatherCode === "number" &&
+      typeof parsed.windSpeed === "number"
+    ) {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
