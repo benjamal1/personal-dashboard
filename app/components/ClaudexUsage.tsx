@@ -33,6 +33,14 @@ export default function ClaudexUsage() {
 
   useEffect(() => {
     let cancelled = false;
+    let intervalId: number | null = null;
+
+    const scheduleNext = (isFresh: boolean) => {
+      if (intervalId !== null) window.clearInterval(intervalId);
+      // If data is fresh, poll every 5 min. If stale/refreshing, check every 10s.
+      const delay = isFresh ? 5 * 60 * 1000 : 10 * 1000;
+      intervalId = window.setInterval(() => void loadUsage(), delay);
+    };
 
     const loadUsage = async (forceRefresh = false) => {
       try {
@@ -51,6 +59,9 @@ export default function ClaudexUsage() {
             status: "ready",
             data: payload
           });
+          // Reschedule: check quickly if data is still warming/stale
+          const isFresh = payload.cache.status === "fresh";
+          scheduleNext(isFresh);
         }
       } catch {
         if (!cancelled) {
@@ -58,19 +69,19 @@ export default function ClaudexUsage() {
             status: "error",
             data: null
           });
+          scheduleNext(false);
         }
       }
     };
 
-    void loadUsage();
-
-    const intervalId = window.setInterval(() => {
-      void loadUsage();
-    }, 5 * 60 * 1000);
+    // On mount: load cached data immediately (fast, avoids skeleton flash).
+    // The server starts a background refresh if the cache is stale. The smart
+    // polling loop will check every 10s and update the UI once fresh data lands.
+    void loadUsage(false);
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      if (intervalId !== null) window.clearInterval(intervalId);
     };
   }, []);
 

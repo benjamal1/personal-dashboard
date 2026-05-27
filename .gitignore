@@ -8,6 +8,7 @@ npm-debug.log*
 .DS_Store
 data/todos.json
 data/usage-cache.json
+data/habits.json
 *.tsbuildinfo
 yarn-debug.log*
 yarn-error.log*

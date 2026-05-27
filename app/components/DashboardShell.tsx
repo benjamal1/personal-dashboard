@@ -11,9 +11,12 @@ import {
 } from "lucide-react";
 
 import Clock from "./Clock";
+import SearchBar from "./SearchBar";
 import TodoList from "./TodoList";
 import Weather from "./Weather";
 import ClaudexUsage from "./ClaudexUsage";
+import HabitTracker from "./HabitTracker";
+import TodoAnalytics from "./TodoAnalytics";
 
 type ViewId = "home" | "tasks" | "usage" | "digest";
 
@@ -182,7 +185,12 @@ export default function DashboardShell({ initialTimestamp }: DashboardShellProps
         {visibleView === "home" ? (
           <div className="flex w-full max-w-lg flex-col items-center gap-0 px-2 md:px-8">
             <>
-              <Clock initialTimestamp={initialTimestamp} />
+              <div className="w-full">
+                <SearchBar />
+              </div>
+              <div className="mt-14">
+                <Clock initialTimestamp={initialTimestamp} />
+              </div>
               <Weather />
               <TodoList />
             </>
@@ -190,6 +198,12 @@ export default function DashboardShell({ initialTimestamp }: DashboardShellProps
         ) : visibleView === "usage" ? (
           <div className="flex w-full flex-col items-center px-0 md:px-4">
             <ClaudexUsage />
+          </div>
+        ) : visibleView === "tasks" ? (
+          <div className="flex w-full flex-col gap-0 px-4 py-8 md:px-10">
+            <HabitTracker />
+            <div className="my-16 h-px w-full bg-zinc-900/60" />
+            <TodoAnalytics />
           </div>
         ) : (
           <div className="flex w-full max-w-lg flex-col items-center gap-0 px-2 md:px-8">
