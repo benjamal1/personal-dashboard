@@ -203,3 +203,17 @@ export async function getRecentNotes(vaultDir: string, limit: number): Promise<R
 
   return notes.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, limit);
 }
+
+export async function submitPaper(webhookUrl: string, input: string): Promise<unknown> {
+  const response = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ input })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Reading digest webhook returned ${response.status}`);
+  }
+
+  return response.json();
+}

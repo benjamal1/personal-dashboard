@@ -2,9 +2,9 @@ import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { getRecentNotes, getTodayDigest, parseTodaySection } from "./digest";
+import { getRecentNotes, getTodayDigest, parseTodaySection, submitPaper } from "./digest";
 
 const FIXTURE_VAULT_DIR = join(__dirname, "__fixtures__", "reading-digest");
 
@@ -149,5 +149,42 @@ describe("getRecentNotes", () => {
       "Cardiac tissue engineering: an emerging approach to the treatment of heart failure"
     );
     expect(pisheh?.sourceKind).toBe("journal");
+  });
+});
+
+describe("submitPaper", () => {
+  it("posts the input to the given webhook URL and returns the parsed JSON response", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ status: "ok", title: "Sample Paper" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await submitPaper("https://webhook.example/intake", "https://arxiv.org/abs/1234.5678");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://webhook.example/intake",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ input: "https://arxiv.org/abs/1234.5678" })
+      })
+    );
+    expect(result).toEqual({ status: "ok", title: "Sample Paper" });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("throws when the webhook responds with a non-OK status", async () => {
+    const fetchMock = vi.fn(async () => new Response("error", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(submitPaper("https://webhook.example/intake", "bad input")).rejects.toThrow(
+      "Reading digest webhook returned 500"
+    );
+
+    vi.unstubAllGlobals();
   });
 });
