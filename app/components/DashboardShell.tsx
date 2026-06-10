@@ -17,6 +17,7 @@ import Weather from "./Weather";
 import ClaudexUsage from "./ClaudexUsage";
 import HabitTracker from "./HabitTracker";
 import TodoAnalytics from "./TodoAnalytics";
+import ReadingDigest from "./ReadingDigest";
 
 type ViewId = "home" | "tasks" | "usage" | "digest";
 
@@ -204,6 +205,10 @@ export default function DashboardShell({ initialTimestamp }: DashboardShellProps
             <HabitTracker />
             <div className="my-16 h-px w-full bg-zinc-900/60" />
             <TodoAnalytics />
+          </div>
+        ) : visibleView === "digest" ? (
+          <div className="flex w-full flex-col px-4 py-8 md:px-10">
+            <ReadingDigest />
           </div>
         ) : (
           <div className="flex w-full max-w-lg flex-col items-center gap-0 px-2 md:px-8">
