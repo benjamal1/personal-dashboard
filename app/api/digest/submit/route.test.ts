@@ -34,6 +34,36 @@ describe("POST /api/digest/submit", () => {
     expect(response.status).toBe(400);
   });
 
+  it("returns 400 when JSON body is malformed", async () => {
+    const request = new Request("http://localhost/api/digest/submit", {
+      method: "POST",
+      body: "not valid json",
+      headers: { "Content-Type": "application/json" }
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Invalid JSON body" });
+  });
+
+  it("returns 400 when input exceeds max length", async () => {
+    const longInput = "a".repeat(10001);
+
+    const request = new Request("http://localhost/api/digest/submit", {
+      method: "POST",
+      body: JSON.stringify({ input: longInput }),
+      headers: { "Content-Type": "application/json" }
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Input too long" });
+  });
+
   it("returns 502 when submitPaper throws", async () => {
     vi.mocked(submitPaper).mockRejectedValueOnce(new Error("Reading digest webhook returned 500"));
 
@@ -44,7 +74,9 @@ describe("POST /api/digest/submit", () => {
     });
 
     const response = await POST(request);
+    const body = await response.json();
 
     expect(response.status).toBe(502);
+    expect(body).toEqual({ error: "Failed to reach reading digest service" });
   });
 });
