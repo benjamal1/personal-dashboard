@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 
 import matter from "gray-matter";
 
@@ -99,6 +99,17 @@ export type TodayDigest = {
   papers: DigestPaper[];
 };
 
+function resolveNotePath(vaultDir: string, noteFile: string): string | null {
+  const notesDir = resolve(vaultDir, "Notes");
+  const candidate = resolve(notesDir, `${noteFile}.md`);
+
+  if (candidate !== notesDir && !candidate.startsWith(notesDir + sep)) {
+    return null;
+  }
+
+  return candidate;
+}
+
 export async function getTodayDigest(vaultDir: string): Promise<TodayDigest> {
   const digestPath = join(vaultDir, "Reading Digest.md");
 
@@ -113,9 +124,8 @@ export async function getTodayDigest(vaultDir: string): Promise<TodayDigest> {
 
   const papers = await Promise.all(
     section.entries.map(async (entry) => {
-      const frontmatter = entry.noteFile
-        ? await readNoteFrontmatter(join(vaultDir, "Notes", `${entry.noteFile}.md`))
-        : null;
+      const notePath = entry.noteFile ? resolveNotePath(vaultDir, entry.noteFile) : null;
+      const frontmatter = notePath ? await readNoteFrontmatter(notePath) : null;
 
       return {
         ...entry,

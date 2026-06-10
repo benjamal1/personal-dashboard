@@ -1,3 +1,5 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -85,5 +87,38 @@ describe("getTodayDigest", () => {
 
     expect(digest.date).toBeNull();
     expect(digest.papers).toEqual([]);
+  });
+
+  it("does not read frontmatter from outside the Notes directory for a malicious noteFile", async () => {
+    const tempVaultDir = await mkdtemp(join(tmpdir(), "reading-digest-"));
+
+    try {
+      await mkdir(join(tempVaultDir, "Notes"), { recursive: true });
+      await writeFile(
+        join(tempVaultDir, "Reading Digest.md"),
+        `# Reading Digest
+
+## Today — 2026-06-08
+
+### Malicious entry
+**Authors:** Unknown
+**Added:** 2026-05-02
+**Topics:** Security
+[[../../../etc/passwd]]
+`,
+        "utf-8"
+      );
+
+      const digest = await getTodayDigest(tempVaultDir);
+
+      expect(digest.papers).toHaveLength(1);
+      const [paper] = digest.papers;
+
+      expect(paper.status).toBeNull();
+      expect(paper.tags).toEqual([]);
+      expect(paper.feedback).toBeNull();
+    } finally {
+      await rm(tempVaultDir, { recursive: true, force: true });
+    }
   });
 });
