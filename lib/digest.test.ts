@@ -1,6 +1,10 @@
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { parseTodaySection } from "./digest";
+import { getTodayDigest, parseTodaySection } from "./digest";
+
+const FIXTURE_VAULT_DIR = join(__dirname, "__fixtures__", "reading-digest");
 
 const SAMPLE_DIGEST = `# Reading Digest
 
@@ -51,5 +55,35 @@ describe("parseTodaySection", () => {
 
     expect(result.date).toBeNull();
     expect(result.entries).toEqual([]);
+  });
+});
+
+describe("getTodayDigest", () => {
+  it("merges Today entries with note frontmatter", async () => {
+    const digest = await getTodayDigest(FIXTURE_VAULT_DIR);
+
+    expect(digest.date).toBe("2026-06-08");
+    expect(digest.papers).toHaveLength(2);
+
+    const [pisheh, medos] = digest.papers;
+
+    expect(pisheh.title).toBe(
+      "Cardiac tissue engineering: an emerging approach to the treatment of heart failure"
+    );
+    expect(pisheh.status).toBe("to read");
+    expect(pisheh.tags).toEqual(["cardiac", "tissue-engineering"]);
+    expect(pisheh.feedback).toBe("more");
+    expect(pisheh.noteFile).toBe("pisheh-cardiac");
+
+    expect(medos.status).toBe("reading");
+    expect(medos.tags).toEqual([]);
+    expect(medos.feedback).toBeNull();
+  });
+
+  it("returns empty papers when no Today section exists", async () => {
+    const digest = await getTodayDigest(join(FIXTURE_VAULT_DIR, "does-not-exist"));
+
+    expect(digest.date).toBeNull();
+    expect(digest.papers).toEqual([]);
   });
 });

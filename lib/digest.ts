@@ -1,3 +1,8 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+import matter from "gray-matter";
+
 export type TodayEntry = {
   title: string;
   authors: string;
@@ -80,5 +85,75 @@ function finalizeEntry(entry: Partial<TodayEntry>): TodayEntry {
     added: entry.added ?? "",
     topics: entry.topics ?? [],
     noteFile: entry.noteFile ?? null
+  };
+}
+
+export type DigestPaper = TodayEntry & {
+  status: string | null;
+  tags: string[];
+  feedback: string | null;
+};
+
+export type TodayDigest = {
+  date: string | null;
+  papers: DigestPaper[];
+};
+
+export async function getTodayDigest(vaultDir: string): Promise<TodayDigest> {
+  const digestPath = join(vaultDir, "Reading Digest.md");
+
+  let raw: string;
+  try {
+    raw = await readFile(digestPath, "utf-8");
+  } catch {
+    return { date: null, papers: [] };
+  }
+
+  const section = parseTodaySection(raw);
+
+  const papers = await Promise.all(
+    section.entries.map(async (entry) => {
+      const frontmatter = entry.noteFile
+        ? await readNoteFrontmatter(join(vaultDir, "Notes", `${entry.noteFile}.md`))
+        : null;
+
+      return {
+        ...entry,
+        status: frontmatter?.status ?? null,
+        tags: frontmatter?.tags ?? [],
+        feedback: frontmatter?.feedback ?? null
+      };
+    })
+  );
+
+  return { date: section.date, papers };
+}
+
+type NoteFrontmatter = {
+  status: string | null;
+  tags: string[];
+  feedback: string | null;
+  title: string | null;
+  sourceKind: string | null;
+  intakeAt: string | null;
+};
+
+export async function readNoteFrontmatter(filePath: string): Promise<NoteFrontmatter | null> {
+  let raw: string;
+  try {
+    raw = await readFile(filePath, "utf-8");
+  } catch {
+    return null;
+  }
+
+  const { data } = matter(raw);
+
+  return {
+    status: typeof data.status === "string" ? data.status : null,
+    tags: Array.isArray(data.tags) ? data.tags.filter((tag): tag is string => typeof tag === "string") : [],
+    feedback: typeof data.feedback === "string" && data.feedback.length > 0 ? data.feedback : null,
+    title: typeof data.title === "string" ? data.title : null,
+    sourceKind: typeof data.source_kind === "string" ? data.source_kind : null,
+    intakeAt: typeof data.intake_at === "string" ? data.intake_at : null
   };
 }
