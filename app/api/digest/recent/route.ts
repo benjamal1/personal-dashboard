@@ -14,7 +14,7 @@ const VAULT_DIGEST_DIR =
 
 const RECENT_NOTES_LIMIT = 10;
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   const notes = await getRecentNotes(VAULT_DIGEST_DIR, RECENT_NOTES_LIMIT);
 
   return NextResponse.json({ notes });

@@ -9,7 +9,7 @@ const WEBHOOK_URL =
   process.env.READING_DIGEST_WEBHOOK_URL ?? "http://localhost:5678/webhook/reading-digest-intake";
 const MAX_INPUT_LENGTH = 10000;
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<NextResponse> {
   let body: { input?: unknown };
   try {
     body = (await request.json()) as { input?: unknown };

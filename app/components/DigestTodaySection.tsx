@@ -8,12 +8,21 @@ type DigestTodaySectionProps = {
 
 const VAULT_NOTES_PATH = "Articles and Papers/Reading Digest/Notes";
 
+function sanitizeNoteSegment(value: string): string {
+  return value
+    .split("/")
+    .filter((segment) => segment !== "" && segment !== "..")
+    .join("/");
+}
+
 function obsidianLink(vaultName: string, noteFile: string): string {
-  const filePath = `${VAULT_NOTES_PATH}/${noteFile}.md`;
+  const filePath = `${VAULT_NOTES_PATH}/${sanitizeNoteSegment(noteFile)}.md`;
   return `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(filePath)}`;
 }
 
-function FeedbackBadge({ feedback }: { feedback: string | null }) {
+type FeedbackBadgeProps = { feedback: string | null };
+
+function FeedbackBadge({ feedback }: FeedbackBadgeProps): JSX.Element | null {
   if (feedback === "more") {
     return <span className="text-xs font-light text-zinc-400">more ↑</span>;
   }

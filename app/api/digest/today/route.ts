@@ -12,7 +12,7 @@ const VAULT_DIGEST_DIR =
   process.env.READING_DIGEST_VAULT_DIR ??
   join(homedir(), "obsidian-vault", "Articles and Papers", "Reading Digest");
 
-export async function GET() {
+export async function GET(): Promise<NextResponse> {
   const digest = await getTodayDigest(VAULT_DIGEST_DIR);
 
   return NextResponse.json(digest);

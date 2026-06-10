@@ -25,7 +25,7 @@ export default function DigestSubmitBar({ onSubmitted }: DigestSubmitBarProps) {
   const [value, setValue] = useState("");
   const [state, setState] = useState<SubmitState>({ status: "idle" });
 
-  async function submit(input: string) {
+  async function submit(input: string): Promise<void> {
     setState({ status: "submitting", input });
 
     try {
@@ -48,7 +48,7 @@ export default function DigestSubmitBar({ onSubmitted }: DigestSubmitBarProps) {
     }
   }
 
-  function handleSubmit(event: React.FormEvent) {
+  function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
     const trimmed = value.trim();
 

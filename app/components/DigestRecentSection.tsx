@@ -7,8 +7,15 @@ type DigestRecentSectionProps = {
 
 const VAULT_NOTES_PATH = "Articles and Papers/Reading Digest/Notes";
 
+function sanitizeNoteSegment(value: string): string {
+  return value
+    .split("/")
+    .filter((segment) => segment !== "" && segment !== "..")
+    .join("/");
+}
+
 function obsidianLink(vaultName: string, fileName: string): string {
-  const filePath = `${VAULT_NOTES_PATH}/${fileName}.md`;
+  const filePath = `${VAULT_NOTES_PATH}/${sanitizeNoteSegment(fileName)}.md`;
   return `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(filePath)}`;
 }
 
