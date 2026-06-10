@@ -1,10 +1,10 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { getTodayDigest, parseTodaySection } from "./digest";
+import { getRecentNotes, getTodayDigest, parseTodaySection } from "./digest";
 
 const FIXTURE_VAULT_DIR = join(__dirname, "__fixtures__", "reading-digest");
 
@@ -120,5 +120,34 @@ describe("getTodayDigest", () => {
     } finally {
       await rm(tempVaultDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("getRecentNotes", () => {
+  it("returns notes sorted by most-recently-modified first, limited to N", async () => {
+    const notesDir = join(FIXTURE_VAULT_DIR, "Notes");
+
+    // Make older-note.md clearly older than the others
+    const oldDate = new Date("2026-01-01T00:00:00Z");
+    const recentDate = new Date("2026-06-08T00:00:00Z");
+    await utimes(join(notesDir, "older-note.md"), oldDate, oldDate);
+    await utimes(join(notesDir, "pisheh-cardiac.md"), recentDate, recentDate);
+    await utimes(join(notesDir, "medos-cobot.md"), recentDate, recentDate);
+
+    const notes = await getRecentNotes(FIXTURE_VAULT_DIR, 2);
+
+    expect(notes).toHaveLength(2);
+    expect(notes.map((note) => note.fileName)).not.toContain("older-note");
+  });
+
+  it("includes title, sourceKind, and fileName for each note", async () => {
+    const notes = await getRecentNotes(FIXTURE_VAULT_DIR, 10);
+    const pisheh = notes.find((note) => note.fileName === "pisheh-cardiac");
+
+    expect(pisheh).toBeDefined();
+    expect(pisheh?.title).toBe(
+      "Cardiac tissue engineering: an emerging approach to the treatment of heart failure"
+    );
+    expect(pisheh?.sourceKind).toBe("journal");
   });
 });

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, stat } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 
 import matter from "gray-matter";
@@ -166,4 +166,40 @@ export async function readNoteFrontmatter(filePath: string): Promise<NoteFrontma
     sourceKind: typeof data.source_kind === "string" ? data.source_kind : null,
     intakeAt: typeof data.intake_at === "string" ? data.intake_at : null
   };
+}
+
+export type RecentNote = {
+  fileName: string;
+  title: string;
+  sourceKind: string | null;
+  intakeAt: string | null;
+  mtimeMs: number;
+};
+
+export async function getRecentNotes(vaultDir: string, limit: number): Promise<RecentNote[]> {
+  const notesDir = join(vaultDir, "Notes");
+
+  let fileNames: string[];
+  try {
+    fileNames = (await readdir(notesDir)).filter((name) => name.endsWith(".md"));
+  } catch {
+    return [];
+  }
+
+  const notes = await Promise.all(
+    fileNames.map(async (fileName) => {
+      const filePath = join(notesDir, fileName);
+      const [stats, frontmatter] = await Promise.all([stat(filePath), readNoteFrontmatter(filePath)]);
+
+      return {
+        fileName: fileName.replace(/\.md$/, ""),
+        title: frontmatter?.title ?? fileName.replace(/\.md$/, ""),
+        sourceKind: frontmatter?.sourceKind ?? null,
+        intakeAt: frontmatter?.intakeAt ?? null,
+        mtimeMs: stats.mtimeMs
+      };
+    })
+  );
+
+  return notes.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, limit);
 }
