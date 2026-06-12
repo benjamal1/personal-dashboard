@@ -13,3 +13,7 @@ data/habits.json
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# Claude local state
+.claude/worktrees/
+.superpowers/

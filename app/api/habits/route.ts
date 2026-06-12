@@ -39,19 +39,9 @@ export async function GET() {
   try {
     const store = await loadStore();
 
-    // Return completions for the last 90 days only
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 90);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-
-    const filteredCompletions: Record<string, Record<string, number>> = {};
-    for (const [date, counts] of Object.entries(store.completions)) {
-      if (date >= cutoffStr) filteredCompletions[date] = counts;
-    }
-
     return NextResponse.json({
       habits: store.habits,
-      completions: filteredCompletions
+      completions: store.completions
     });
   } catch (error) {
     return NextResponse.json(
