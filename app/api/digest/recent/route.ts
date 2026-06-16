@@ -12,7 +12,7 @@ const VAULT_DIGEST_DIR =
   process.env.READING_DIGEST_VAULT_DIR ??
   join(homedir(), "obsidian-vault", "Articles and Papers", "Reading Digest");
 
-const RECENT_NOTES_LIMIT = 10;
+const RECENT_NOTES_LIMIT = 50;
 
 export async function GET(): Promise<NextResponse> {
   const notes = await getRecentNotes(VAULT_DIGEST_DIR, RECENT_NOTES_LIMIT);

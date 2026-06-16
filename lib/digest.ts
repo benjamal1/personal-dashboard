@@ -172,9 +172,18 @@ export type RecentNote = {
   fileName: string;
   title: string;
   sourceKind: string | null;
+  status: string | null;
   intakeAt: string | null;
   mtimeMs: number;
 };
+
+// Statuses that count as "read" (sink to the bottom of the library).
+const READ_STATUSES = new Set(["read_summary", "read", "archived"]);
+
+export function isReadStatus(status: string | null): boolean {
+  if (!status) return false;
+  return READ_STATUSES.has(status.trim().toLowerCase().replace(/ /g, "_"));
+}
 
 export async function getRecentNotes(vaultDir: string, limit: number): Promise<RecentNote[]> {
   const notesDir = join(vaultDir, "Notes");
@@ -195,13 +204,21 @@ export async function getRecentNotes(vaultDir: string, limit: number): Promise<R
         fileName: fileName.replace(/\.md$/, ""),
         title: frontmatter?.title ?? fileName.replace(/\.md$/, ""),
         sourceKind: frontmatter?.sourceKind ?? null,
+        status: frontmatter?.status ?? null,
         intakeAt: frontmatter?.intakeAt ?? null,
         mtimeMs: stats.mtimeMs
       };
     })
   );
 
-  return notes.sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, limit);
+  // Library order: unread on top, read at the bottom; newest first within each group.
+  return notes
+    .sort((a, b) => {
+      const readDelta = Number(isReadStatus(a.status)) - Number(isReadStatus(b.status));
+      if (readDelta !== 0) return readDelta;
+      return b.mtimeMs - a.mtimeMs;
+    })
+    .slice(0, limit);
 }
 
 export async function submitPaper(webhookUrl: string, input: string): Promise<unknown> {

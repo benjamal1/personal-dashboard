@@ -1,4 +1,4 @@
-import type { RecentNote } from "@/lib/digest";
+import { isReadStatus, type RecentNote } from "@/lib/digest";
 
 type DigestRecentSectionProps = {
   notes: RecentNote[];
@@ -37,29 +37,54 @@ function relativeTime(mtimeMs: number): string {
 }
 
 export default function DigestRecentSection({ notes, vaultName }: DigestRecentSectionProps) {
+  const unread = notes.filter((note) => !isReadStatus(note.status));
+  const read = notes.filter((note) => isReadStatus(note.status));
+
+  function renderRow(note: RecentNote) {
+    return (
+      <li key={note.fileName} className="flex items-baseline justify-between gap-4">
+        <a
+          href={obsidianLink(vaultName, note.fileName)}
+          className="min-w-0 truncate text-sm font-light text-zinc-200 hover:text-zinc-300"
+        >
+          {note.title}
+        </a>
+        <span className="shrink-0 text-xs font-light text-zinc-600">
+          {note.sourceKind ? `${note.sourceKind} · ` : ""}
+          {relativeTime(note.mtimeMs)}
+        </span>
+      </li>
+    );
+  }
+
   return (
     <section className="flex w-full flex-col gap-6">
-      <p className="text-xs font-light uppercase tracking-[0.2em] text-zinc-700">Recently added</p>
+      <p className="text-xs font-light uppercase tracking-[0.2em] text-zinc-700">Library</p>
 
       {notes.length === 0 ? (
         <p className="text-sm font-light text-zinc-600">No notes yet — add a paper above</p>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {notes.map((note) => (
-            <li key={note.fileName} className="flex items-baseline justify-between gap-4">
-              <a
-                href={obsidianLink(vaultName, note.fileName)}
-                className="min-w-0 truncate text-sm font-light text-zinc-200 hover:text-zinc-300"
-              >
-                {note.title}
-              </a>
-              <span className="shrink-0 text-xs font-light text-zinc-600">
-                {note.sourceKind ? `${note.sourceKind} · ` : ""}
-                {relativeTime(note.mtimeMs)}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="flex flex-col gap-8">
+          <div className="flex flex-col gap-3">
+            <p className="text-[0.65rem] font-light uppercase tracking-[0.25em] text-zinc-600">
+              To read · {unread.length}
+            </p>
+            {unread.length === 0 ? (
+              <p className="text-sm font-light text-zinc-700">Nothing unread</p>
+            ) : (
+              <ul className="flex flex-col gap-3">{unread.map(renderRow)}</ul>
+            )}
+          </div>
+
+          {read.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <p className="text-[0.65rem] font-light uppercase tracking-[0.25em] text-zinc-700">
+                Read · {read.length}
+              </p>
+              <ul className="flex flex-col gap-3 opacity-60">{read.map(renderRow)}</ul>
+            </div>
+          )}
+        </div>
       )}
     </section>
   );
