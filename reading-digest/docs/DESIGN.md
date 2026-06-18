@@ -15,14 +15,11 @@ of the rest of the dashboard.
 | Backend lib | `lib/digest.ts`, `lib/digest-shared.ts` (+ `lib/digest.test.ts`) |
 | Fixtures | `lib/__fixtures__/reading-digest/` |
 
-## External dependency (⚠ to resolve)
+## Backend (ported into this repo 2026-06-18)
 
-A markdown-cleaning preprocessor still lives in the **archived claudex** repo:
-`~/projects/claudex/reading_digest/cleaner.py` (+ `slack.py` for Slack ingest). It preserves
+The markdown-cleaning preprocessor now lives **in this repo** at `reading-digest/reading_digest/cleaner.py` (+ `slack.py`). It preserves
 `_quarantine.json` history across runs (orphan notes are review-only flags, not registry stubs).
-**Decision pending:** if this still feeds the dashboard's vault/data, port it into this repo
-(e.g. `reading-digest/scripts/`) before claudex is deleted. If `lib/digest.ts` fully replaced it,
-it's dead.
+**Still to verify:** confirm the n8n pipeline points at this copy (not the old claudex path), then the claudex original can go.
 
 ## Design docs
 - `../superpowers/plans/2026-06-09-reading-digest-view.md`
