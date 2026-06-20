@@ -3,6 +3,10 @@ import { join, resolve, sep } from "node:path";
 
 import matter from "gray-matter";
 
+import { isReadStatus, type RecentNote } from "./digest-shared";
+export type { RecentNote };
+export { isReadStatus };
+
 export type TodayEntry = {
   title: string;
   authors: string;
@@ -168,22 +172,7 @@ export async function readNoteFrontmatter(filePath: string): Promise<NoteFrontma
   };
 }
 
-export type RecentNote = {
-  fileName: string;
-  title: string;
-  sourceKind: string | null;
-  status: string | null;
-  intakeAt: string | null;
-  mtimeMs: number;
-};
 
-// Statuses that count as "read" (sink to the bottom of the library).
-const READ_STATUSES = new Set(["read_summary", "read", "archived"]);
-
-export function isReadStatus(status: string | null): boolean {
-  if (!status) return false;
-  return READ_STATUSES.has(status.trim().toLowerCase().replace(/ /g, "_"));
-}
 
 export async function getRecentNotes(vaultDir: string, limit: number): Promise<RecentNote[]> {
   const notesDir = join(vaultDir, "Notes");

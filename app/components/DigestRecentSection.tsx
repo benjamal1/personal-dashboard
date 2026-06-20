@@ -1,4 +1,4 @@
-import { isReadStatus, type RecentNote } from "@/lib/digest";
+import { isReadStatus, type RecentNote } from "@/lib/digest-shared";
 
 type DigestRecentSectionProps = {
   notes: RecentNote[];
