@@ -1,13 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import DigestJobBlock from "./DigestJobBlock";
 
 type SubmitState =
   | { status: "idle" }
   | { status: "submitting"; input: string }
+  | { status: "queued"; input: string }
   | { status: "error"; input: string; message: string };
+
+// Submission is async: the webhook returns "queued" immediately and the
+// resolver/note pipeline runs in the background (~15 min). The note appears in
+// the Library section below on the next poll. This banner auto-clears.
+const QUEUED_NOTICE_MS = 8000;
 
 type DigestSubmitBarProps = {
   onSubmitted: () => void;
@@ -40,13 +46,22 @@ export default function DigestSubmitBar({ onSubmitted }: DigestSubmitBarProps) {
         throw new Error(typeof body?.error === "string" ? body.error : `Request failed (${response.status})`);
       }
 
-      setState({ status: "idle" });
+      setState({ status: "queued", input });
       setValue("");
       onSubmitted();
     } catch (error: unknown) {
       setState({ status: "error", input, message: getErrorMessage(error) });
     }
   }
+
+  useEffect(() => {
+    if (state.status !== "queued") {
+      return;
+    }
+
+    const timeout = setTimeout(() => setState({ status: "idle" }), QUEUED_NOTICE_MS);
+    return () => clearTimeout(timeout);
+  }, [state]);
 
   function handleSubmit(event: React.FormEvent): void {
     event.preventDefault();
@@ -75,6 +90,11 @@ export default function DigestSubmitBar({ onSubmitted }: DigestSubmitBarProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex w-full flex-col gap-2">
+      {state.status === "queued" ? (
+        <p className="text-xs font-light text-zinc-500">
+          queued — <span className="text-zinc-400">{state.input}</span> appears in Library when ready
+        </p>
+      ) : null}
       <div className="flex items-center gap-3 border-b border-zinc-800 pb-2">
         <input
           type="text"
