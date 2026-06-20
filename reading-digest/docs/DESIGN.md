@@ -40,6 +40,25 @@ Anthropic API), NOT the old `codex-runner.sh exec` (OpenAI-billed).
 - **MCP:** finder + resolver get the `research.json` preset (research-gateway + consensus) forwarded through the subworkflow's `mcpPreset` arg; recommender + note-gen run with no MCP (file ops).
 - Submit is fire-and-forget: webhook returns `{status:"queued"}` before the ~15-min pipeline; the note surfaces via the UI's 60s Library poll.
 
+## Vault data layout (`~/obsidian-vault/Articles and Papers/Reading Digest/`)
+
+**Source of truth (JSON):** `_reading_sources.json` (registry — everything derives from this),
+`_reading_topics.json` (topic weights), `_quarantine.json` (cleaner history).
+
+**Live, read by the app:** `Reading Digest.md` `## Today` (← daily-recommender, → `/api/digest/today`)
+· `Notes/*.md` (← note-generator, → `/api/digest/recent`).
+
+**Cleaner-generated Obsidian views (not read by the app):** `Reading Sources.md`, `Reading Library.md`,
+`Runs/clean-*.md`.
+
+**Agent code:** `_agents/prompts/*.md` (the 4 templates the n8n Build Jobs reference — live/critical),
+`_agents/.env` + `config.py`. **Assets:** `PDFS/`.
+
+> ⚠️ These paths are hardcoded across `lib/digest.ts`, `cleaner.py`, the 4 prompt templates, and the
+> n8n Build Jobs — do not move them without updating every consumer. Cleanup = subtraction, not reorg.
+> (2026-06-20: removed stale `Reading Digest Dashboard.md` / `Reading Inbox.md` /
+> `Reading Digest Status Legend.md` — old in-Obsidian dashboards superseded by the Next.js app.)
+
 ## Design docs
 - `../superpowers/plans/2026-06-09-reading-digest-view.md`
 - `../superpowers/specs/2026-06-09-reading-digest-view-design.md`
