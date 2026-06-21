@@ -1,4 +1,4 @@
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 
 import matter from "gray-matter";
@@ -103,10 +103,64 @@ function finalizeEntry(entry: Partial<TodayEntry>): TodayEntry {
 }
 
 export type DigestPaper = TodayEntry & {
+  itemId: string | null;
   status: string | null;
   tags: string[];
   feedback: string | null;
 };
+
+type QueueItem = {
+  item_id?: unknown;
+  title?: unknown;
+  authors?: unknown;
+  added?: unknown;
+  topics?: unknown;
+  source?: unknown;
+  note_relpath?: unknown;
+};
+
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+// The recommender pre-computes a ranked queue (`_reading_queue.json`); the
+// dashboard advances through it client-side so "next" is instant. Falls back to
+// the markdown "## Today" parse when the queue file doesn't exist yet.
+async function readQueuePapers(vaultDir: string): Promise<{ date: string | null; papers: DigestPaper[] } | null> {
+  const queuePath = join(vaultDir, "_reading_queue.json");
+
+  let raw: string;
+  try {
+    raw = await readFile(queuePath, "utf-8");
+  } catch {
+    return null;
+  }
+
+  let parsed: { date?: unknown; items?: unknown };
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+
+  const items = Array.isArray(parsed.items) ? (parsed.items as QueueItem[]) : [];
+  const papers: DigestPaper[] = items
+    .filter((item) => str(item.title).length > 0)
+    .map((item) => ({
+      itemId: str(item.item_id) || null,
+      title: str(item.title),
+      authors: str(item.authors),
+      added: str(item.added),
+      topics: Array.isArray(item.topics) ? item.topics.filter((t): t is string => typeof t === "string") : [],
+      noteFile: str(item.note_relpath) || null,
+      sourceUrl: str(item.source) || null,
+      status: null,
+      tags: [],
+      feedback: null
+    }));
+
+  return { date: typeof parsed.date === "string" ? parsed.date : null, papers };
+}
 
 export type TodayDigest = {
   date: string | null;
@@ -125,6 +179,11 @@ function resolveNotePath(vaultDir: string, noteFile: string): string | null {
 }
 
 export async function getTodayDigest(vaultDir: string): Promise<TodayDigest> {
+  const queue = await readQueuePapers(vaultDir);
+  if (queue) {
+    return queue;
+  }
+
   const digestPath = join(vaultDir, "Reading Digest.md");
 
   let raw: string;
@@ -143,6 +202,7 @@ export async function getTodayDigest(vaultDir: string): Promise<TodayDigest> {
 
       return {
         ...entry,
+        itemId: null,
         status: frontmatter?.status ?? null,
         tags: frontmatter?.tags ?? [],
         feedback: frontmatter?.feedback ?? null
@@ -257,6 +317,41 @@ export async function getRecentNotes(vaultDir: string, limit: number): Promise<R
       return b.mtimeMs - a.mtimeMs;
     })
     .slice(0, limit);
+}
+
+export type Priority = "high" | "normal" | "low";
+
+// 👍/👎 on a recommendation maps to the registry item's priority, which the
+// recommender already scores (+0.3 / -0.2). No prompt-logic change needed.
+export async function setItemPriority(
+  vaultDir: string,
+  itemId: string,
+  priority: Priority
+): Promise<boolean> {
+  const registryPath = join(vaultDir, "_reading_sources.json");
+
+  let registry: { items?: unknown };
+  try {
+    registry = JSON.parse(await readFile(registryPath, "utf-8"));
+  } catch {
+    return false;
+  }
+
+  const items = Array.isArray(registry.items) ? (registry.items as Array<Record<string, unknown>>) : null;
+  if (!items) {
+    return false;
+  }
+
+  const item = items.find((entry) => entry.item_id === itemId);
+  if (!item) {
+    return false;
+  }
+
+  item.priority = priority;
+  item.updated_at = new Date().toISOString();
+
+  await writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`, "utf-8");
+  return true;
 }
 
 export async function submitPaper(webhookUrl: string, input: string): Promise<unknown> {
