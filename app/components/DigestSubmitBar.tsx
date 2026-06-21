@@ -5,77 +5,77 @@ import { Loader2 } from "lucide-react";
 
 type SubmitState =
   | { status: "idle" }
-  | { status: "submitting"; input: string }
-  | { status: "error"; input: string; message: string };
+  | { status: "submitting" }
+  | { status: "error"; message: string };
 
 type DigestSubmitBarProps = {
-  // Called once the webhook accepts the submission (async — the note lands
-  // ~15 min later). The parent tracks it as a pending item until then.
-  onQueued: (input: string) => void;
+  // Called after the submission is accepted; parent refreshes the intake queue.
+  onSubmitted: () => void;
 };
 
 function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return "Something went wrong";
+  return error instanceof Error ? error.message : "Something went wrong";
 }
 
-export default function DigestSubmitBar({ onQueued }: DigestSubmitBarProps) {
+export default function DigestSubmitBar({ onSubmitted }: DigestSubmitBarProps) {
   const [value, setValue] = useState("");
   const [state, setState] = useState<SubmitState>({ status: "idle" });
 
-  async function submit(input: string): Promise<void> {
-    setState({ status: "submitting", input });
+  async function submit(): Promise<void> {
+    const inputs = value
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
 
+    if (inputs.length === 0 || state.status === "submitting") {
+      return;
+    }
+
+    setState({ status: "submitting" });
     try {
       const response = await fetch("/api/digest/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ input })
+        body: JSON.stringify({ inputs })
       });
-
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(typeof body?.error === "string" ? body.error : `Request failed (${response.status})`);
       }
-
       setValue("");
       setState({ status: "idle" });
-      onQueued(input);
+      onSubmitted();
     } catch (error: unknown) {
-      setState({ status: "error", input, message: getErrorMessage(error) });
+      setState({ status: "error", message: getErrorMessage(error) });
     }
   }
 
-  function handleSubmit(event: React.FormEvent): void {
-    event.preventDefault();
-    const trimmed = value.trim();
-
-    if (trimmed.length === 0 || state.status === "submitting") {
-      return;
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
+    // Enter submits; Shift+Enter inserts a newline (for adding several at once).
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void submit();
     }
-
-    void submit(trimmed);
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-2">
-      <div className="flex items-center gap-3 border-b border-zinc-800 pb-2">
-        <input
-          type="text"
+    <div className="flex w-full flex-col gap-2">
+      <div className="flex items-start gap-3 border-b border-zinc-800 pb-2">
+        <textarea
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          placeholder="https://arxiv.org/abs/… or paper title"
+          onKeyDown={handleKeyDown}
+          rows={1}
+          placeholder="Paste a link or title — Shift+Enter for several at once"
           aria-label="Paper URL or title"
           disabled={state.status === "submitting"}
-          className="w-full bg-transparent text-sm font-light text-zinc-100 placeholder:text-zinc-700 focus:outline-none disabled:opacity-50"
+          className="w-full resize-none bg-transparent text-sm font-light text-zinc-100 placeholder:text-zinc-700 focus:outline-none disabled:opacity-50"
         />
         <button
-          type="submit"
+          type="button"
+          onClick={() => void submit()}
           disabled={state.status === "submitting"}
-          className="flex shrink-0 items-center gap-1 text-sm font-light text-zinc-400 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600 disabled:opacity-50"
+          className="flex shrink-0 items-center gap-1 pt-0.5 text-sm font-light text-zinc-400 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600 disabled:opacity-50"
         >
           {state.status === "submitting" ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.5} aria-hidden="true" />
@@ -84,19 +84,10 @@ export default function DigestSubmitBar({ onQueued }: DigestSubmitBarProps) {
         </button>
       </div>
       {state.status === "error" ? (
-        <p className="text-xs font-light text-red-400">
-          {state.message} ·{" "}
-          <button
-            type="button"
-            onClick={() => void submit(state.input)}
-            className="text-zinc-400 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600"
-          >
-            retry
-          </button>
-        </p>
+        <p className="text-xs font-light text-red-400">{state.message}</p>
       ) : (
         <p className="text-xs font-light text-zinc-700">arxiv · pmc · springer · wiley · acs · ieee · doi</p>
       )}
-    </form>
+    </div>
   );
 }

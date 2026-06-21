@@ -2,24 +2,9 @@ import { randomUUID } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-// Server-side intake queue: papers the user submitted, tracked through the
-// pipeline (queued -> resolver -> note) with live status reported by n8n. Items
-// persist and stay visible — even after completion — until the user clears them.
-export type IntakeStage = "queued" | "resolver" | "note";
-export type IntakeState = "pending" | "running" | "done" | "failed";
+import type { IntakeItem, IntakeStage, IntakeState } from "./digest-shared";
 
-export type IntakeItem = {
-  id: string;
-  input: string;
-  source: string | null;
-  createdAt: number;
-  updatedAt: number;
-  stage: IntakeStage;
-  state: IntakeState;
-  noteFile: string | null;
-  summary: string | null;
-  error: string | null;
-};
+export type { IntakeItem, IntakeStage, IntakeState };
 
 const INTAKE_FILE = process.env.DIGEST_INTAKE_FILE ?? join(process.cwd(), "data", "intake.json");
 

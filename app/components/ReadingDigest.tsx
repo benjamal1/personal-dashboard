@@ -3,16 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { RecentNote, TodayDigest } from "@/lib/digest";
-import { reconcilePending, type PendingItem } from "@/lib/digest-shared";
+import type { IntakeItem } from "@/lib/digest-shared";
 import DigestSubmitBar from "./DigestSubmitBar";
-import DigestPendingSection from "./DigestPendingSection";
+import DigestIntakeSection from "./DigestIntakeSection";
 import DigestTodaySection from "./DigestTodaySection";
 import DigestRecentSection from "./DigestRecentSection";
 
 const POLL_INTERVAL_MS = 60_000;
+const INTAKE_POLL_MS = 15_000;
 const TODAY_PAGE = 3;
 const CURSOR_KEY = "reading-digest-cursor";
-const PENDING_KEY = "reading-digest-pending";
 // obsidian:// links open in the Obsidian app on whatever machine clicks them —
 // usually the Mac over Tailscale, where the vault is named "BJ's Obsidian Vault".
 const VAULT_NAME = process.env.NEXT_PUBLIC_OBSIDIAN_VAULT ?? "BJ's Obsidian Vault";
@@ -21,31 +21,24 @@ type Vote = "up" | "down";
 
 const EMPTY_TODAY: TodayDigest = { date: null, papers: [] };
 
-// crypto.randomUUID only exists in a secure context (HTTPS/localhost); the
-// dashboard is served over plain HTTP via Tailscale, so roll our own id.
-function genId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function loadPending(): PendingItem[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
-  try {
-    const raw = window.sessionStorage.getItem(PENDING_KEY);
-    return raw ? (JSON.parse(raw) as PendingItem[]) : [];
-  } catch {
-    return [];
-  }
-}
-
 export default function ReadingDigest() {
   const [today, setToday] = useState<TodayDigest>(EMPTY_TODAY);
   const [recent, setRecent] = useState<RecentNote[]>([]);
-  const [pending, setPending] = useState<PendingItem[]>(loadPending);
+  const [intake, setIntake] = useState<IntakeItem[]>([]);
   const [cursor, setCursor] = useState(0);
   const [votes, setVotes] = useState<Record<string, Vote>>({});
   const [error, setError] = useState<string | null>(null);
+
+  const loadIntake = useCallback(async () => {
+    try {
+      const res = await fetch("/api/digest/intake");
+      if (res.ok) {
+        setIntake((await res.json()).items ?? []);
+      }
+    } catch {
+      // non-fatal; keep last
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -53,31 +46,31 @@ export default function ReadingDigest() {
         fetch("/api/digest/today"),
         fetch("/api/digest/recent")
       ]);
-
       if (!todayResponse.ok || !recentResponse.ok) {
         throw new Error("bad response");
       }
-
       setToday(await todayResponse.json());
-      const body = await recentResponse.json();
-      setRecent(body.notes ?? []);
+      setRecent((await recentResponse.json()).notes ?? []);
       setError(null);
     } catch {
       setError("Couldn't reach the digest service — showing the last loaded data.");
     }
-  }, []);
+    await loadIntake();
+  }, [loadIntake]);
 
   useEffect(() => {
     void refresh();
-    const interval = setInterval(() => void refresh(), POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [refresh]);
+    const slow = setInterval(() => void refresh(), POLL_INTERVAL_MS);
+    // Poll the intake queue more often so live status feels responsive.
+    const fast = setInterval(() => void loadIntake(), INTAKE_POLL_MS);
+    return () => {
+      clearInterval(slow);
+      clearInterval(fast);
+    };
+  }, [refresh, loadIntake]);
 
-  // Restore the cursor for the current queue (reset when a new queue is generated).
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
+    if (typeof window === "undefined") return;
     try {
       const raw = window.localStorage.getItem(CURSOR_KEY);
       const saved = raw ? (JSON.parse(raw) as { date: string | null; cursor: number }) : null;
@@ -88,41 +81,44 @@ export default function ReadingDigest() {
   }, [today.date]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
+    if (typeof window === "undefined") return;
     window.localStorage.setItem(CURSOR_KEY, JSON.stringify({ date: today.date, cursor }));
   }, [cursor, today.date]);
 
-  // Reconcile pending submissions against the library whenever it updates.
-  useEffect(() => {
-    setPending((prev) => reconcilePending(prev, recent));
-  }, [recent]);
+  const handleClear = useCallback(
+    (id: string) => {
+      void fetch("/api/digest/intake/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      }).then(loadIntake);
+    },
+    [loadIntake]
+  );
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    window.sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending));
-  }, [pending]);
+  const handleClearDone = useCallback(() => {
+    void fetch("/api/digest/intake/clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    }).then(loadIntake);
+  }, [loadIntake]);
 
-  const handleQueued = useCallback((input: string) => {
-    setPending((prev) => [
-      { id: genId(), input, submittedAt: Date.now(), failed: false },
-      ...prev
-    ]);
-    void refresh();
-  }, [refresh]);
-
-  const handleDismiss = useCallback((id: string) => {
-    setPending((prev) => prev.filter((item) => item.id !== id));
-  }, []);
+  const handleRetry = useCallback(
+    (input: string) => {
+      void fetch("/api/digest/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inputs: [input] })
+      }).then(loadIntake);
+    },
+    [loadIntake]
+  );
 
   const handleNext = useCallback(() => {
     setCursor((prev) => {
       const next = prev + TODAY_PAGE;
       if (next >= today.papers.length) {
-        // Cycled through the queue — ask the recommender to refill in the background.
         void fetch("/api/digest/refill", { method: "POST" }).catch(() => undefined);
         return 0;
       }
@@ -153,9 +149,15 @@ export default function ReadingDigest() {
 
   return (
     <div className="flex w-full flex-col gap-12">
-      <DigestSubmitBar onQueued={handleQueued} />
+      <DigestSubmitBar onSubmitted={refresh} />
       {error ? <p className="text-xs font-light text-red-400">{error}</p> : null}
-      <DigestPendingSection items={pending} onDismiss={handleDismiss} />
+      <DigestIntakeSection
+        items={intake}
+        vaultName={VAULT_NAME}
+        onClear={handleClear}
+        onClearDone={handleClearDone}
+        onRetry={handleRetry}
+      />
       <DigestTodaySection
         date={today.date}
         papers={visible}
