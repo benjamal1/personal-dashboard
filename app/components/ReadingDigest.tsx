@@ -21,6 +21,12 @@ type Vote = "up" | "down";
 
 const EMPTY_TODAY: TodayDigest = { date: null, papers: [] };
 
+// crypto.randomUUID only exists in a secure context (HTTPS/localhost); the
+// dashboard is served over plain HTTP via Tailscale, so roll our own id.
+function genId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function loadPending(): PendingItem[] {
   if (typeof window === "undefined") {
     return [];
@@ -102,7 +108,7 @@ export default function ReadingDigest() {
 
   const handleQueued = useCallback((input: string) => {
     setPending((prev) => [
-      { id: crypto.randomUUID(), input, submittedAt: Date.now(), failed: false },
+      { id: genId(), input, submittedAt: Date.now(), failed: false },
       ...prev
     ]);
     void refresh();
