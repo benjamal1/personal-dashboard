@@ -23,6 +23,20 @@ ingest (Slack/notes) → [claudex cleaner.py?] → vault/data → `/api/digest/t
 - Old pipeline ran 3 workflows (Parent + Daily + Intake) on `codex-runner.sh exec` (OpenAI-billed),
   with a synchronous webhook that blocked the dashboard submit for the whole ~15-min pipeline.
 
+## Inline rebuild + full logging (2026-06-21)
+- Rebuilt the workflow **self-contained** (`XxWYMW44t3XvzJaY`, renamed "Reading Digest", 53 nodes):
+  dropped the shared `seedK8` subworkflow, inlined launch/poll per stage, added structured
+  `<stage>.result.json` + `agent.log` write-back, and per-stage status POSTs to the dashboard.
+- **GOTCHA — n8n is a Docker container.** The status POSTs first used `http://localhost:3000` and
+  silently failed (continueOnFail) — `localhost` inside the container ≠ the host dashboard. Fixed to
+  `http://host.docker.internal:3000`. SSH nodes were never affected (they ssh into the host).
+- **Fixed waits → poll loops.** Each stage now polls every 1 min up to a counter cap instead of one
+  big 10–14 min wait. Smoke test: VGG paper resolved in 2 min, note in 2 min (~4 min vs ~24 before),
+  status flowed `queued → resolver/done → note/done`, note landed in the Library, math rendered as
+  Obsidian `$...$`.
+- `crypto.randomUUID` crash on submit fixed — it needs a secure context (HTTPS/localhost); over plain
+  HTTP Tailscale it's undefined. Replaced with a plain id generator.
+
 ## Resolution (2026-06-20)
 - Consolidated to ONE workflow **"Reading Digest"** (`DfgOg5j5eQNteB4g`); deleted Parent/Daily/Intake.
 - All 4 agent stages moved from codex to the **n8n-claude-runner** subworkflow (`seedK8FzrL37Wx94`);

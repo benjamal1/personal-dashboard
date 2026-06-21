@@ -24,21 +24,35 @@ flags, not registry stubs). It is a **manual tool** — nothing automated (n8n o
 claudex's copy is referenced only by claudex's own tests/docs and is retired with the claudex
 decommission, separately.
 
-## n8n pipeline (single workflow, Claude-run — 2026-06-20)
+## n8n pipeline (single self-contained workflow, Claude-run, fully logged — rebuilt 2026-06-21)
 
-One n8n workflow **"Reading Digest"** (`DfgOg5j5eQNteB4g`) replaces the former
-Parent + Daily + Intake trio. All four agent stages run via the **n8n-claude-runner** pattern
-(shared `⚙️ Invoke Claude` subworkflow `seedK8FzrL37Wx94` — tmux+SSH Claude Code session, no
-Anthropic API), NOT the old `codex-runner.sh exec` (OpenAI-billed).
+One n8n workflow **"Reading Digest"** (`XxWYMW44t3XvzJaY`, ACTIVE, 53 nodes). It is **self-contained**
+— the agent launch/poll is **inlined** as explicit SSH nodes (the shared `seedK8` subworkflow was
+dropped for this workflow; it stays for Track A/B). All agent stages run via the n8n-claude-runner
+mechanics (tmux+SSH Claude Code session, no Anthropic API), NOT `codex-runner.sh`.
 
-| Trigger | Stages (each = Build Job → Invoke Claude) |
-|---------|--------------------------------------------|
-| Webhook `reading-digest-intake` (on-demand, **async** — responds `queued` immediately) | paper-resolver → note-generator |
-| Schedule 5am + Manual | paper-finder → daily-recommender |
+| Trigger | Stages |
+|---------|--------|
+| Webhook `reading-digest-intake` (per-paper, **async** — responds `queued`) | resolver → note |
+| Schedule 5am + Manual | finder → recommender |
+| Webhook `reading-digest-refill` | recommender-only (regenerates the queue) |
 
-- Agent prompts read the vault templates at `~/obsidian-vault/Articles and Papers/Reading Digest/_agents/prompts/*.md`; each Build Job points a stage at a run-scoped output file under `/tmp/digest-jobs/<runId>/`.
-- **MCP:** finder + resolver get the `research.json` preset (research-gateway + consensus) forwarded through the subworkflow's `mcpPreset` arg; recommender + note-gen run with no MCP (file ops).
-- Submit is fire-and-forget: webhook returns `{status:"queued"}` before the ~15-min pipeline; the note surfaces via the UI's 60s Library poll.
+Each stage = `Build (Code) → SSH Launch → [poll loop: Wait 1m → SSH Poll → IF done? → Bump counter →
+IF under max? → loop] → SSH Read Result → (intake stages) HTTP status POST`.
+
+- **Full logging / troubleshooting:** every agent writes a structured `<runDir>/<stage>.result.json`
+  (`{stage,status,summary,error}`) + appends to `<runDir>/agent.log`; the Read-Result SSH nodes surface
+  these into the n8n exec log (`saveDataSuccessExecution: all`). So a failure shows *why*
+  (e.g. `full_text_unavailable`) in both n8n and the dashboard, not just "timeout".
+- **Live intake status:** the resolver/note stages POST `{id, stage, state, noteFile, error}` to the
+  dashboard `/api/digest/intake/status`. ⚠️ **n8n is a Docker container** — these POSTs use
+  `http://host.docker.internal:3000`, NOT `localhost` (which is the container, not the host; localhost
+  silently failed until fixed 2026-06-21). SSH nodes are unaffected.
+- **Poll loops, not fixed waits:** each stage polls every 1 min up to a counter cap (~20–25). Fast
+  papers finish in ~2 min/stage instead of always waiting the full budget (~4 min end-to-end vs ~24).
+- **MCP:** finder + resolver get `research.json` (research-gateway + consensus) via the launch
+  script's 3rd arg; recommender/note run MCP-less.
+- Submit is fire-and-forget per paper; status surfaces in the dashboard Incoming queue (15s poll).
 
 ## Recommendation queue + feedback (2026-06-21)
 
@@ -54,6 +68,19 @@ The recommender pre-computes a ranked queue so the dashboard never waits on a Cl
 - **Feedback** — 👍/👎 per paper → `POST /api/digest/feedback` → `setItemPriority` writes
   `priority: high|low` on the registry item by `item_id`. The recommender already scores priority
   (+0.3 / −0.2), so no prompt-logic change — feedback just nudges the next ranking.
+
+## Intake queue (2026-06-21)
+
+Submitting a paper creates a tracked item, not a fire-and-forget. `data/intake.json` is the
+server-side store (`lib/digest-intake.ts`, serialized writes); items persist and stay visible until
+cleared.
+
+- `POST /api/digest/submit` takes `inputs[]` (multi-add — paste several, one per line), creates one
+  item per input, fires one pipeline run each with its `intakeId`.
+- n8n reports progress to `POST /api/digest/intake/status` per stage → the UI's **Incoming** section
+  (`DigestIntakeSection`, 15s poll) shows `Resolving → Paper found → Note created / failed`.
+- Failed items expose a paste-a-link/PDF **retry** (re-submits); `clear` / `clear done` remove items.
+- `POST /api/digest/intake/source` records a corrected source on an item.
 
 Obsidian links use vault name **`BJ's Obsidian Vault`** (env `NEXT_PUBLIC_OBSIDIAN_VAULT`) with **no
 `.md`** suffix — required for the link to resolve when clicked from the Mac over Tailscale. Library
