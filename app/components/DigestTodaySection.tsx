@@ -16,7 +16,7 @@ function sanitizeNoteSegment(value: string): string {
 }
 
 function obsidianLink(vaultName: string, noteFile: string): string {
-  const filePath = `${VAULT_NOTES_PATH}/${sanitizeNoteSegment(noteFile)}.md`;
+  const filePath = `${VAULT_NOTES_PATH}/${sanitizeNoteSegment(noteFile)}`;
   return `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(filePath)}`;
 }
 
@@ -53,6 +53,15 @@ export default function DigestTodaySection({ date, papers, vaultName }: DigestTo
                 {paper.noteFile ? (
                   <a
                     href={obsidianLink(vaultName, paper.noteFile)}
+                    className="block text-sm font-light text-zinc-100 hover:text-zinc-300"
+                  >
+                    {paper.title}
+                  </a>
+                ) : paper.sourceUrl ? (
+                  <a
+                    href={paper.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="block text-sm font-light text-zinc-100 hover:text-zinc-300"
                   >
                     {paper.title}

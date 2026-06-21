@@ -13,6 +13,7 @@ export type TodayEntry = {
   added: string;
   topics: string[];
   noteFile: string | null;
+  sourceUrl: string | null;
 };
 
 export type TodaySection = {
@@ -24,6 +25,8 @@ const TODAY_HEADER_RE = /^## Today — (\d{4}-\d{2}-\d{2})\s*$/m;
 const ENTRY_HEADER_RE = /^### (.+)$/;
 const FIELD_RE = /^\*\*(\w+):\*\* (.+?)\s*$/;
 const WIKILINK_RE = /^\[\[(.+)\]\]$/;
+// Recommender writes `[title](url)` for papers that have no note yet.
+const MD_LINK_RE = /^\[.+\]\((https?:\/\/[^)]+)\)$/;
 
 export function parseTodaySection(markdown: string): TodaySection {
   const headerMatch = markdown.match(TODAY_HEADER_RE);
@@ -72,6 +75,12 @@ export function parseTodaySection(markdown: string): TodaySection {
     const linkMatch = line.match(WIKILINK_RE);
     if (linkMatch) {
       current.noteFile = linkMatch[1];
+      continue;
+    }
+
+    const mdLinkMatch = line.match(MD_LINK_RE);
+    if (mdLinkMatch) {
+      current.sourceUrl = mdLinkMatch[1];
     }
   }
 
@@ -88,7 +97,8 @@ function finalizeEntry(entry: Partial<TodayEntry>): TodayEntry {
     authors: entry.authors ?? "Unknown",
     added: entry.added ?? "",
     topics: entry.topics ?? [],
-    noteFile: entry.noteFile ?? null
+    noteFile: entry.noteFile ?? null,
+    sourceUrl: entry.sourceUrl ?? null
   };
 }
 
@@ -150,7 +160,37 @@ type NoteFrontmatter = {
   title: string | null;
   sourceKind: string | null;
   intakeAt: string | null;
+  origin: string | null;
+  manualTags: string[];
 };
+
+// Human-readable provenance for the Library, derived from origin + lab tags.
+// (source_kind like "vault-note" describes the file format, not where it came
+// from — this answers "who/what put this here".)
+export function deriveSource(
+  origin: string | null,
+  manualTags: string[],
+  sourceKind: string | null
+): string | null {
+  const tags = manualTags.map((tag) => tag.toLowerCase());
+  if (tags.some((tag) => tag === "surgical-informatics-lab" || tag === "silab")) return "SILab";
+  if (tags.some((tag) => tag.includes("coulombe"))) return "Coulombe Lab";
+
+  switch (origin) {
+    case "slack-papers-and-more":
+      return "SILab";
+    case "paper-finder":
+      return "Bot";
+    case "n8n-intake":
+      return "Uploaded";
+    case "manual entry":
+      return "Manual";
+    case "outside suggestion":
+      return "Suggested";
+    default:
+      return sourceKind;
+  }
+}
 
 export async function readNoteFrontmatter(filePath: string): Promise<NoteFrontmatter | null> {
   let raw: string;
@@ -168,7 +208,11 @@ export async function readNoteFrontmatter(filePath: string): Promise<NoteFrontma
     feedback: typeof data.feedback === "string" && data.feedback.length > 0 ? data.feedback : null,
     title: typeof data.title === "string" ? data.title : null,
     sourceKind: typeof data.source_kind === "string" ? data.source_kind : null,
-    intakeAt: typeof data.intake_at === "string" ? data.intake_at : null
+    intakeAt: typeof data.intake_at === "string" ? data.intake_at : null,
+    origin: typeof data.origin === "string" ? data.origin : null,
+    manualTags: Array.isArray(data.manual_tags)
+      ? data.manual_tags.filter((tag): tag is string => typeof tag === "string")
+      : []
   };
 }
 
@@ -193,6 +237,11 @@ export async function getRecentNotes(vaultDir: string, limit: number): Promise<R
         fileName: fileName.replace(/\.md$/, ""),
         title: frontmatter?.title ?? fileName.replace(/\.md$/, ""),
         sourceKind: frontmatter?.sourceKind ?? null,
+        source: deriveSource(
+          frontmatter?.origin ?? null,
+          frontmatter?.manualTags ?? [],
+          frontmatter?.sourceKind ?? null
+        ),
         status: frontmatter?.status ?? null,
         intakeAt: frontmatter?.intakeAt ?? null,
         mtimeMs: stats.mtimeMs

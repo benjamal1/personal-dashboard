@@ -10,7 +10,9 @@ import DigestTodaySection from "./DigestTodaySection";
 import DigestRecentSection from "./DigestRecentSection";
 
 const POLL_INTERVAL_MS = 60_000;
-const VAULT_NAME = "obsidian-vault";
+// obsidian:// links open in the Obsidian app on whatever machine clicks them —
+// usually the Mac over Tailscale, where the vault is named "BJ's Obsidian Vault".
+const VAULT_NAME = process.env.NEXT_PUBLIC_OBSIDIAN_VAULT ?? "BJ's Obsidian Vault";
 const PENDING_KEY = "reading-digest-pending";
 
 const EMPTY_TODAY: TodayDigest = { date: null, papers: [] };

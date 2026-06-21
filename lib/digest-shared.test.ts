@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { reconcilePending, RESOLVE_TIMEOUT_MS, type PendingItem, type RecentNote } from "./digest-shared";
 
 function note(fileName: string, mtimeMs: number): RecentNote {
-  return { fileName, title: fileName, sourceKind: "arxiv", status: "to_read", intakeAt: null, mtimeMs };
+  return { fileName, title: fileName, sourceKind: "arxiv", source: "Uploaded", status: "to_read", intakeAt: null, mtimeMs };
 }
 
 function pending(id: string, submittedAt: number): PendingItem {

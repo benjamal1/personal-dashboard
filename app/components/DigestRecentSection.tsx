@@ -15,7 +15,7 @@ function sanitizeNoteSegment(value: string): string {
 }
 
 function obsidianLink(vaultName: string, fileName: string): string {
-  const filePath = `${VAULT_NOTES_PATH}/${sanitizeNoteSegment(fileName)}.md`;
+  const filePath = `${VAULT_NOTES_PATH}/${sanitizeNoteSegment(fileName)}`;
   return `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(filePath)}`;
 }
 
@@ -50,7 +50,7 @@ export default function DigestRecentSection({ notes, vaultName }: DigestRecentSe
           {note.title}
         </a>
         <span className="shrink-0 text-xs font-light text-zinc-600">
-          {note.sourceKind ? `${note.sourceKind} · ` : ""}
+          {note.source ? `${note.source} · ` : ""}
           {relativeTime(note.mtimeMs)}
         </span>
       </li>

@@ -2,6 +2,7 @@ export type RecentNote = {
   fileName: string;
   title: string;
   sourceKind: string | null;
+  source: string | null;
   status: string | null;
   intakeAt: string | null;
   mtimeMs: number;
