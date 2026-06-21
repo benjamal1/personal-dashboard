@@ -40,6 +40,26 @@ Anthropic API), NOT the old `codex-runner.sh exec` (OpenAI-billed).
 - **MCP:** finder + resolver get the `research.json` preset (research-gateway + consensus) forwarded through the subworkflow's `mcpPreset` arg; recommender + note-gen run with no MCP (file ops).
 - Submit is fire-and-forget: webhook returns `{status:"queued"}` before the ~15-min pipeline; the note surfaces via the UI's 60s Library poll.
 
+## Recommendation queue + feedback (2026-06-21)
+
+The recommender pre-computes a ranked queue so the dashboard never waits on a Claude run:
+
+- **`_reading_queue.json`** — daily-recommender writes the top ~20 scored papers (item_id, title,
+  authors, topics, source, note_relpath, score). `getTodayDigest` reads this (falls back to the
+  markdown `## Today` parse until it exists).
+- **Instant "next"** — Today pages 3 at a time via a client-side cursor (localStorage, keyed by queue
+  date). Advancing is pure client-side; wrapping past the end fires `POST /api/digest/refill`.
+- **Refill** — `/api/digest/refill` → n8n webhook `reading-digest-refill` (recommender-only branch in
+  workflow `DfgOg5j5eQNteB4g`) regenerates the queue async. The 5am daily run also refills.
+- **Feedback** — 👍/👎 per paper → `POST /api/digest/feedback` → `setItemPriority` writes
+  `priority: high|low` on the registry item by `item_id`. The recommender already scores priority
+  (+0.3 / −0.2), so no prompt-logic change — feedback just nudges the next ranking.
+
+Obsidian links use vault name **`BJ's Obsidian Vault`** (env `NEXT_PUBLIC_OBSIDIAN_VAULT`) with **no
+`.md`** suffix — required for the link to resolve when clicked from the Mac over Tailscale. Library
+**source** shows provenance (`deriveSource`: SILab / Coulombe Lab / Bot / Uploaded / Manual /
+Suggested) from `origin` + lab tags, not the file-format `source_kind`.
+
 ## Vault data layout (`~/obsidian-vault/Articles and Papers/Reading Digest/`)
 
 **Source of truth (JSON):** `_reading_sources.json` (registry — everything derives from this),
