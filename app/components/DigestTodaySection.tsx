@@ -1,4 +1,4 @@
-import { ThumbsUp, ThumbsDown, ArrowRight } from "lucide-react";
+import { ThumbsUp, ThumbsDown, ArrowRight, FileText } from "lucide-react";
 
 import type { DigestPaper } from "@/lib/digest";
 
@@ -11,6 +11,8 @@ type DigestTodaySectionProps = {
   vaultName: string;
   onNext: () => void;
   onFeedback: (itemId: string, vote: Vote) => void;
+  onGenerate: (itemId: string, input: string) => void;
+  generating: Set<string>;
   votes: Record<string, Vote>;
 };
 
@@ -35,6 +37,8 @@ export default function DigestTodaySection({
   vaultName,
   onNext,
   onFeedback,
+  onGenerate,
+  generating,
   votes
 }: DigestTodaySectionProps) {
   return (
@@ -93,6 +97,21 @@ export default function DigestTodaySection({
                 </div>
                 {paper.itemId ? (
                   <div className="flex shrink-0 items-center gap-2">
+                    {!paper.noteFile ? (
+                      generating.has(paper.itemId) ? (
+                        <span className="text-xs font-light text-zinc-600">summarizing…</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => onGenerate(paper.itemId!, paper.sourceUrl ?? paper.title)}
+                          title="Generate summary note"
+                          className="flex items-center gap-1 text-xs font-light text-zinc-500 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600"
+                        >
+                          <FileText className="h-3.5 w-3.5" strokeWidth={1.5} aria-hidden="true" />
+                          summarize
+                        </button>
+                      )
+                    ) : null}
                     <button
                       type="button"
                       aria-label="More like this"

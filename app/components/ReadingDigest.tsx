@@ -27,6 +27,7 @@ export default function ReadingDigest() {
   const [intake, setIntake] = useState<IntakeItem[]>([]);
   const [cursor, setCursor] = useState(0);
   const [votes, setVotes] = useState<Record<string, Vote>>({});
+  const [generating, setGenerating] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
   const loadIntake = useCallback(async () => {
@@ -115,6 +116,18 @@ export default function ReadingDigest() {
     [loadIntake]
   );
 
+  const handleGenerate = useCallback(
+    (itemId: string, input: string) => {
+      setGenerating((prev) => new Set(prev).add(itemId));
+      void fetch("/api/digest/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId, input })
+      }).then(loadIntake);
+    },
+    [loadIntake]
+  );
+
   const handleNext = useCallback(() => {
     setCursor((prev) => {
       const next = prev + TODAY_PAGE;
@@ -165,6 +178,8 @@ export default function ReadingDigest() {
         vaultName={VAULT_NAME}
         onNext={handleNext}
         onFeedback={handleFeedback}
+        onGenerate={handleGenerate}
+        generating={generating}
         votes={votes}
       />
       <DigestRecentSection notes={recent} vaultName={VAULT_NAME} />
