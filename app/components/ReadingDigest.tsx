@@ -116,6 +116,15 @@ export default function ReadingDigest() {
     [loadIntake]
   );
 
+  const handleUpload = useCallback(
+    (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      void fetch("/api/digest/upload", { method: "POST", body: form }).then(loadIntake);
+    },
+    [loadIntake]
+  );
+
   const handleGenerate = useCallback(
     (itemId: string, input: string) => {
       setGenerating((prev) => new Set(prev).add(itemId));
@@ -170,6 +179,7 @@ export default function ReadingDigest() {
         onClear={handleClear}
         onClearDone={handleClearDone}
         onRetry={handleRetry}
+        onUpload={handleUpload}
       />
       <DigestTodaySection
         date={today.date}

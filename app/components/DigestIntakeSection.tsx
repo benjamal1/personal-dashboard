@@ -13,7 +13,18 @@ type DigestIntakeSectionProps = {
   onClear: (id: string) => void;
   onClearDone: () => void;
   onRetry: (input: string) => void;
+  onUpload: (file: File) => void;
 };
+
+// Uploaded PDFs are stored as PDFS/upload-<ts>-<name> — show just the readable name.
+function displayLabel(item: IntakeItem): string {
+  if (item.summary) return item.summary;
+  if (item.input.includes("/PDFS/")) {
+    const base = item.input.split("/").pop() ?? item.input;
+    return base.replace(/^upload-\d+-/, "");
+  }
+  return item.input;
+}
 
 type Visual = { label: string; tone: "muted" | "done" | "failed"; icon: "spin" | "done" | "fail" };
 
@@ -36,7 +47,14 @@ function obsidianLink(vaultName: string, noteFile: string): string {
   return `obsidian://open?vault=${encodeURIComponent(vaultName)}&file=${encodeURIComponent(`${VAULT_NOTES_PATH}/${seg}`)}`;
 }
 
-export default function DigestIntakeSection({ items, vaultName, onClear, onClearDone, onRetry }: DigestIntakeSectionProps) {
+export default function DigestIntakeSection({
+  items,
+  vaultName,
+  onClear,
+  onClearDone,
+  onRetry,
+  onUpload
+}: DigestIntakeSectionProps) {
   if (items.length === 0) {
     return null;
   }
@@ -59,7 +77,14 @@ export default function DigestIntakeSection({ items, vaultName, onClear, onClear
       </div>
       <ul className="flex flex-col gap-3">
         {items.map((item) => (
-          <IntakeRow key={item.id} item={item} vaultName={vaultName} onClear={onClear} onRetry={onRetry} />
+          <IntakeRow
+            key={item.id}
+            item={item}
+            vaultName={vaultName}
+            onClear={onClear}
+            onRetry={onRetry}
+            onUpload={onUpload}
+          />
         ))}
       </ul>
     </section>
@@ -70,12 +95,14 @@ function IntakeRow({
   item,
   vaultName,
   onClear,
-  onRetry
+  onRetry,
+  onUpload
 }: {
   item: IntakeItem;
   vaultName: string;
   onClear: (id: string) => void;
   onRetry: (input: string) => void;
+  onUpload: (file: File) => void;
 }) {
   const v = visualFor(item);
   const [link, setLink] = useState("");
@@ -96,10 +123,10 @@ function IntakeRow({
             href={obsidianLink(vaultName, item.noteFile)}
             className="min-w-0 truncate text-sm font-light text-zinc-200 hover:text-zinc-300"
           >
-            {item.summary ?? item.input}
+            {displayLabel(item)}
           </a>
         ) : (
-          <span className="min-w-0 truncate text-sm font-light text-zinc-300">{item.input}</span>
+          <span className="min-w-0 truncate text-sm font-light text-zinc-300">{displayLabel(item)}</span>
         )}
         <span className={`ml-auto shrink-0 text-xs font-light ${toneClass}`}>{v.label}</span>
         <button
@@ -112,33 +139,51 @@ function IntakeRow({
         </button>
       </div>
       {item.state === "failed" ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const trimmed = link.trim();
-            if (trimmed) {
-              onRetry(trimmed);
-              onClear(item.id);
-              setLink("");
-            }
-          }}
-          className="ml-6 flex items-center gap-2"
-        >
-          <input
-            type="text"
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder="paste a working link or PDF path to retry"
-            aria-label="Retry with link"
-            className="w-full bg-transparent text-xs font-light text-zinc-300 placeholder:text-zinc-700 focus:outline-none"
-          />
-          <button
-            type="submit"
-            className="shrink-0 text-xs font-light text-zinc-500 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600"
+        <div className="ml-6 flex items-center gap-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const trimmed = link.trim();
+              if (trimmed) {
+                onRetry(trimmed);
+                onClear(item.id);
+                setLink("");
+              }
+            }}
+            className="flex flex-1 items-center gap-2"
           >
-            retry →
-          </button>
-        </form>
+            <input
+              type="text"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              placeholder="paste a working link to retry"
+              aria-label="Retry with link"
+              className="w-full bg-transparent text-xs font-light text-zinc-300 placeholder:text-zinc-700 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="shrink-0 text-xs font-light text-zinc-500 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600"
+            >
+              retry →
+            </button>
+          </form>
+          <label className="shrink-0 cursor-pointer text-xs font-light text-zinc-500 hover:text-zinc-200">
+            upload PDF
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) {
+                  onUpload(f);
+                  onClear(item.id);
+                }
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
       ) : null}
     </li>
   );
