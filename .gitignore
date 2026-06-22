@@ -9,6 +9,8 @@ npm-debug.log*
 data/todos.json
 data/usage-cache.json
 data/habits.json
+data/intake.json
+.dmux-hooks/
 *.tsbuildinfo
 yarn-debug.log*
 yarn-error.log*
