@@ -1,8 +1,21 @@
-import { ThumbsUp, ThumbsDown, ArrowRight, FileText } from "lucide-react";
+import { ThumbsUp, ThumbsDown, RefreshCw, FileText } from "lucide-react";
 
 import type { DigestPaper } from "@/lib/digest";
 
 type Vote = "up" | "down";
+
+// Priority → title colour. High is a dull, on-theme red; low is dimmed; normal
+// keeps the existing zinc. Tweak the high shade here if it reads too hot/cold.
+function titleClasses(priority: DigestPaper["priority"]): string {
+  switch (priority) {
+    case "high":
+      return "text-red-300/90 hover:text-red-200";
+    case "low":
+      return "text-zinc-500 hover:text-zinc-300";
+    default:
+      return "text-zinc-100 hover:text-zinc-300";
+  }
+}
 
 type DigestTodaySectionProps = {
   date: string | null;
@@ -48,13 +61,14 @@ export default function DigestTodaySection({
           {date ? `Today — ${date}` : "Today"}
           {total > 0 ? <span className="text-zinc-800"> · {total} queued</span> : null}
         </p>
-        {total > papers.length ? (
+        {total > 0 ? (
           <button
             type="button"
             onClick={onNext}
+            title="Show the next batch of recommendations"
             className="flex shrink-0 items-center gap-1 text-xs font-light text-zinc-500 hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-600"
           >
-            next <ArrowRight className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
+            cycle <RefreshCw className="h-3 w-3" strokeWidth={1.5} aria-hidden="true" />
           </button>
         ) : null}
       </div>
@@ -73,7 +87,7 @@ export default function DigestTodaySection({
                   {paper.noteFile ? (
                     <a
                       href={obsidianLink(vaultName, paper.noteFile)}
-                      className="block text-sm font-light text-zinc-100 hover:text-zinc-300"
+                      className={`block text-sm font-light ${titleClasses(paper.priority)}`}
                     >
                       {paper.title}
                     </a>
@@ -82,12 +96,12 @@ export default function DigestTodaySection({
                       href={paper.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block text-sm font-light text-zinc-100 hover:text-zinc-300"
+                      className={`block text-sm font-light ${titleClasses(paper.priority)}`}
                     >
                       {paper.title}
                     </a>
                   ) : (
-                    <p className="text-sm font-light text-zinc-100">{paper.title}</p>
+                    <p className={`text-sm font-light ${titleClasses(paper.priority)}`}>{paper.title}</p>
                   )}
                   <p className="mt-1 text-xs font-light text-zinc-600">
                     {paper.authors ? `${paper.authors} · ` : ""}

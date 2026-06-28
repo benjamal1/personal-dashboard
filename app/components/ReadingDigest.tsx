@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import type { RecentNote, TodayDigest } from "@/lib/digest";
+import type { DigestPaper, RecentNote, TodayDigest } from "@/lib/digest";
 import type { IntakeItem } from "@/lib/digest-shared";
 import DigestSubmitBar from "./DigestSubmitBar";
 import DigestIntakeSection from "./DigestIntakeSection";
@@ -12,7 +12,11 @@ import DigestRecentSection from "./DigestRecentSection";
 const POLL_INTERVAL_MS = 60_000;
 const INTAKE_POLL_MS = 15_000;
 const TODAY_PAGE = 3;
-const CURSOR_KEY = "reading-digest-cursor";
+// Button-only advance: we persist the exact item_ids currently shown (BATCH) and
+// the ids already cycled past (SEEN). Picks never rotate on their own — the 5am
+// recommender may re-rank the pool, but the shown batch only changes on "cycle".
+const BATCH_KEY = "reading-digest-batch";
+const SEEN_KEY = "reading-digest-seen";
 // obsidian:// links open in the Obsidian app on whatever machine clicks them —
 // usually the Mac over Tailscale, where the vault is named "BJ's Obsidian Vault".
 const VAULT_NAME = process.env.NEXT_PUBLIC_OBSIDIAN_VAULT ?? "BJ's Obsidian Vault";
@@ -21,11 +25,21 @@ type Vote = "up" | "down";
 
 const EMPTY_TODAY: TodayDigest = { date: null, papers: [] };
 
+// The next batch = the first `size` papers (in ranked order) not yet seen.
+function pickBatch(papers: DigestPaper[], seen: string[], size: number): string[] {
+  const seenSet = new Set(seen);
+  return papers
+    .filter((paper) => paper.itemId && !seenSet.has(paper.itemId))
+    .slice(0, size)
+    .map((paper) => paper.itemId as string);
+}
+
 export default function ReadingDigest() {
   const [today, setToday] = useState<TodayDigest>(EMPTY_TODAY);
   const [recent, setRecent] = useState<RecentNote[]>([]);
   const [intake, setIntake] = useState<IntakeItem[]>([]);
-  const [cursor, setCursor] = useState(0);
+  const [batchIds, setBatchIds] = useState<string[] | null>(null); // null = not yet seeded
+  const [seenIds, setSeenIds] = useState<string[]>([]);
   const [votes, setVotes] = useState<Record<string, Vote>>({});
   const [generating, setGenerating] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -70,21 +84,54 @@ export default function ReadingDigest() {
     };
   }, [refresh, loadIntake]);
 
+  // Restore the persisted batch + seen state once, on mount. Not keyed to the
+  // date — that's the whole point: the view must not reset just because a new day
+  // (or a 5am re-rank) rolled over.
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const raw = window.localStorage.getItem(CURSOR_KEY);
-      const saved = raw ? (JSON.parse(raw) as { date: string | null; cursor: number }) : null;
-      setCursor(saved && saved.date === today.date ? saved.cursor : 0);
+      const rawBatch = window.localStorage.getItem(BATCH_KEY);
+      const rawSeen = window.localStorage.getItem(SEEN_KEY);
+      setBatchIds(rawBatch ? (JSON.parse(rawBatch) as string[]) : null);
+      setSeenIds(rawSeen ? (JSON.parse(rawSeen) as string[]) : []);
     } catch {
-      setCursor(0);
+      setBatchIds(null);
+      setSeenIds([]);
     }
-  }, [today.date]);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || batchIds === null) return;
+    window.localStorage.setItem(BATCH_KEY, JSON.stringify(batchIds));
+  }, [batchIds]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(CURSOR_KEY, JSON.stringify({ date: today.date, cursor }));
-  }, [cursor, today.date]);
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify(seenIds));
+  }, [seenIds]);
+
+  const byId = useMemo(() => {
+    const map = new Map<string, DigestPaper>();
+    for (const paper of today.papers) {
+      if (paper.itemId) map.set(paper.itemId, paper);
+    }
+    return map;
+  }, [today.papers]);
+
+  const visible = useMemo(
+    () => (batchIds ?? []).map((id) => byId.get(id)).filter((p): p is DigestPaper => Boolean(p)),
+    [batchIds, byId]
+  );
+
+  // Seed (or re-seed) the batch when there isn't a valid one: first load, or after
+  // every shown paper dropped out (e.g. it got a note and moved to the Library).
+  useEffect(() => {
+    if (today.papers.length === 0) return;
+    const needsSeed = batchIds === null || (batchIds.length > 0 && visible.length === 0);
+    if (needsSeed) {
+      setBatchIds(pickBatch(today.papers, seenIds, TODAY_PAGE));
+    }
+  }, [batchIds, visible.length, today.papers, seenIds]);
 
   const handleClear = useCallback(
     (id: string) => {
@@ -137,16 +184,20 @@ export default function ReadingDigest() {
     [loadIntake]
   );
 
+  // "cycle": mark the current batch seen and show the next unseen batch. When
+  // everything has been cycled through, ask the recommender to refill and reset.
   const handleNext = useCallback(() => {
-    setCursor((prev) => {
-      const next = prev + TODAY_PAGE;
-      if (next >= today.papers.length) {
-        void fetch("/api/digest/refill", { method: "POST" }).catch(() => undefined);
-        return 0;
-      }
-      return next;
-    });
-  }, [today.papers.length]);
+    const nowSeen = [...new Set([...seenIds, ...(batchIds ?? [])])];
+    const next = pickBatch(today.papers, nowSeen, TODAY_PAGE);
+    if (next.length === 0) {
+      void fetch("/api/digest/refill", { method: "POST" }).catch(() => undefined);
+      setSeenIds([]);
+      setBatchIds(null); // re-seeds from the top once the refill lands
+      return;
+    }
+    setSeenIds(nowSeen);
+    setBatchIds(next);
+  }, [seenIds, batchIds, today.papers]);
 
   const handleFeedback = useCallback((itemId: string, vote: Vote) => {
     let sent: Vote | "clear" = vote;
@@ -166,8 +217,6 @@ export default function ReadingDigest() {
       body: JSON.stringify({ itemId, vote: sent })
     }).catch(() => undefined);
   }, []);
-
-  const visible = today.papers.slice(cursor, cursor + TODAY_PAGE);
 
   return (
     <div className="flex w-full flex-col gap-12">

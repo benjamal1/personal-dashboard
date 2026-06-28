@@ -107,6 +107,7 @@ export type DigestPaper = TodayEntry & {
   status: string | null;
   tags: string[];
   feedback: string | null;
+  priority: Priority | null;
 };
 
 type QueueItem = {
@@ -123,8 +124,35 @@ function str(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+const PRIORITIES = new Set<Priority>(["high", "normal", "low"]);
+
+type RegistryMeta = { priority: Priority | null; hasNote: boolean };
+
+// Priority + note-status live in the registry (`_reading_sources.json`), not the
+// pre-ranked queue. We join on item_id so Today can colour papers by priority and
+// drop any paper that already has a generated note (those belong in the Library).
+async function readRegistryMeta(vaultDir: string): Promise<Map<string, RegistryMeta>> {
+  const map = new Map<string, RegistryMeta>();
+  try {
+    const registry = JSON.parse(await readFile(join(vaultDir, "_reading_sources.json"), "utf-8"));
+    const items = Array.isArray(registry.items) ? (registry.items as Array<Record<string, unknown>>) : [];
+    for (const item of items) {
+      const id = str(item.item_id);
+      if (!id) continue;
+      const priority = str(item.priority) as Priority;
+      map.set(id, {
+        priority: PRIORITIES.has(priority) ? priority : null,
+        hasNote: str(item.note_relpath).length > 0 || str(item.summary_status) === "generated"
+      });
+    }
+  } catch {
+    // no/unreadable registry — papers just render at normal priority, no extra filtering
+  }
+  return map;
+}
+
 // The recommender pre-computes a ranked queue (`_reading_queue.json`); the
-// dashboard advances through it client-side so "next" is instant. Falls back to
+// dashboard advances through it client-side so "cycle" is instant. Falls back to
 // the markdown "## Today" parse when the queue file doesn't exist yet.
 async function readQueuePapers(vaultDir: string): Promise<{ date: string | null; papers: DigestPaper[] } | null> {
   const queuePath = join(vaultDir, "_reading_queue.json");
@@ -143,9 +171,16 @@ async function readQueuePapers(vaultDir: string): Promise<{ date: string | null;
     return null;
   }
 
+  const meta = await readRegistryMeta(vaultDir);
   const items = Array.isArray(parsed.items) ? (parsed.items as QueueItem[]) : [];
   const papers: DigestPaper[] = items
-    .filter((item) => str(item.title).length > 0)
+    .filter((item) => {
+      if (str(item.title).length === 0) return false;
+      // A paper with a note already lives in the Library — keep it out of Today.
+      const reg = meta.get(str(item.item_id));
+      const hasNote = reg ? reg.hasNote : str(item.note_relpath).length > 0;
+      return !hasNote;
+    })
     .map((item) => ({
       itemId: str(item.item_id) || null,
       title: str(item.title),
@@ -156,7 +191,8 @@ async function readQueuePapers(vaultDir: string): Promise<{ date: string | null;
       sourceUrl: str(item.source) || null,
       status: null,
       tags: [],
-      feedback: null
+      feedback: null,
+      priority: meta.get(str(item.item_id))?.priority ?? null
     }));
 
   return { date: typeof parsed.date === "string" ? parsed.date : null, papers };
@@ -205,11 +241,15 @@ export async function getTodayDigest(vaultDir: string): Promise<TodayDigest> {
         itemId: null,
         status: frontmatter?.status ?? null,
         tags: frontmatter?.tags ?? [],
-        feedback: frontmatter?.feedback ?? null
+        feedback: frontmatter?.feedback ?? null,
+        priority: null
       };
     })
   );
 
+  // Note-papers are filtered out in the live queue path (readQueuePapers). This
+  // markdown fallback only runs when _reading_queue.json is missing, so it keeps
+  // the legacy behaviour rather than re-implementing the registry join here.
   return { date: section.date, papers };
 }
 

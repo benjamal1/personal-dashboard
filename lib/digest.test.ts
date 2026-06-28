@@ -82,6 +82,43 @@ describe("getTodayDigest", () => {
     expect(medos.feedback).toBeNull();
   });
 
+  it("from the queue: drops papers that already have a note and joins priority from the registry", async () => {
+    const tempVaultDir = await mkdtemp(join(tmpdir(), "reading-digest-"));
+
+    try {
+      await writeFile(
+        join(tempVaultDir, "_reading_queue.json"),
+        JSON.stringify({
+          date: "2026-06-28",
+          items: [
+            { item_id: "a1", title: "Unread paper", authors: "X", added: "2026-06-20", source: "https://arxiv.org/abs/1" },
+            { item_id: "b2", title: "Already summarized", authors: "Y", added: "2026-06-21", source: "https://arxiv.org/abs/2" }
+          ]
+        }),
+        "utf-8"
+      );
+      await writeFile(
+        join(tempVaultDir, "_reading_sources.json"),
+        JSON.stringify({
+          items: [
+            { item_id: "a1", priority: "high" },
+            { item_id: "b2", priority: "normal", summary_status: "generated" }
+          ]
+        }),
+        "utf-8"
+      );
+
+      const digest = await getTodayDigest(tempVaultDir);
+
+      expect(digest.date).toBe("2026-06-28");
+      expect(digest.papers).toHaveLength(1);
+      expect(digest.papers[0].itemId).toBe("a1");
+      expect(digest.papers[0].priority).toBe("high");
+    } finally {
+      await rm(tempVaultDir, { recursive: true, force: true });
+    }
+  });
+
   it("returns empty papers when no Today section exists", async () => {
     const digest = await getTodayDigest(join(FIXTURE_VAULT_DIR, "does-not-exist"));
 
