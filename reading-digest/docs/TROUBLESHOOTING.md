@@ -37,6 +37,26 @@ ingest (Slack/notes) → [claudex cleaner.py?] → vault/data → `/api/digest/t
 - `crypto.randomUUID` crash on submit fixed — it needs a secure context (HTTPS/localhost); over plain
   HTTP Tailscale it's undefined. Replaced with a plain id generator.
 
+## "Couldn't resolve / timed out" on manual adds — incl. arXiv (2026-06-28)
+- **Symptom:** every manually-added paper (even arXiv, which always has full text) showed
+  "Couldn't resolve" in the intake UI; stored error was `timed out`, not `full_text_unavailable`.
+- **Root cause (NOT the resolver):** `~/.claude/settings.json` global default model was set to
+  `opus[1m]`, so headless launches via `n8n-claude-launch.sh` booted Opus 4.8 1M. That model boots
+  too slowly for the launcher's `is_working()` detector, which *also* only matched old spinner words
+  (Opus 4.8 prints `Waddling/Blanching/Deliberating`). The launcher decided the submit was dropped,
+  killed + relaunched the still-booting session twice (`SSH: Launch Resolver` stderr: *"never showed
+  a working indicator after 3 launches"*), so the resolver Claude never ran → job dir never created →
+  `SSH: Poll Resolver` returned `pending` 25× → `HTTP: Resolver Timeout` POSTed `state:failed`.
+  Evidence: n8n execution `21632` (Jun 26, 26-min run). The resolver agent itself was never the problem.
+- **Fix** (`bj-agent-os/orchestration/scripts/n8n-claude-launch.sh`):
+  1. `is_working()` now matches version-stable signals (`esc to interrupt`, elapsed-timer `(Ns`, token
+     counters) instead of brittle spinner words.
+  2. Boot-detection window widened 12s → ~50s so slow 1M boots aren't killed mid-launch.
+  3. Launcher pins `--model sonnet` (override per-job via `CLAUDE_RUNNER_MODEL`) so headless jobs use
+     Sonnet regardless of the `opus[1m]` global default. `claude_runner.py` shares the script → inherits it.
+- **Verified:** real webhook POST → resolver resolved arXiv 1706.03762 in ~2 min (both result files
+  written, poll signal matched); isolated launcher test boots Sonnet, fast-detects, no warning.
+
 ## Resolution (2026-06-20)
 - Consolidated to ONE workflow **"Reading Digest"** (`DfgOg5j5eQNteB4g`); deleted Parent/Daily/Intake.
 - All 4 agent stages moved from codex to the **n8n-claude-runner** subworkflow (`seedK8FzrL37Wx94`);
