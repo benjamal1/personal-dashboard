@@ -1,10 +1,10 @@
-import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { getRecentNotes, getTodayDigest, parseTodaySection, submitPaper } from "./digest";
+import { getRecentNotes, getTodayDigest, parseTodaySection, setNotePriority, submitPaper } from "./digest";
 
 const FIXTURE_VAULT_DIR = join(__dirname, "__fixtures__", "reading-digest");
 
@@ -154,6 +154,48 @@ describe("getTodayDigest", () => {
       expect(paper.status).toBeNull();
       expect(paper.tags).toEqual([]);
       expect(paper.feedback).toBeNull();
+    } finally {
+      await rm(tempVaultDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("setNotePriority", () => {
+  it("rewrites the note frontmatter priority and mirrors it into the registry", async () => {
+    const tempVaultDir = await mkdtemp(join(tmpdir(), "reading-digest-"));
+
+    try {
+      await mkdir(join(tempVaultDir, "Notes"), { recursive: true });
+      await writeFile(
+        join(tempVaultDir, "Notes", "sample.md"),
+        `---\ntitle: "Sample"\npriority: "normal"\nstatus: "to_read"\n---\n\n# Sample\n`,
+        "utf-8"
+      );
+      await writeFile(
+        join(tempVaultDir, "_reading_sources.json"),
+        JSON.stringify({ items: [{ item_id: "x1", note_relpath: "Notes/sample.md", priority: "normal" }] }),
+        "utf-8"
+      );
+
+      const ok = await setNotePriority(tempVaultDir, "sample", "high");
+      expect(ok).toBe(true);
+
+      const note = await readFile(join(tempVaultDir, "Notes", "sample.md"), "utf-8");
+      expect(note).toContain('priority: "high"');
+      expect(note).toContain('title: "Sample"'); // other frontmatter untouched
+
+      const registry = JSON.parse(await readFile(join(tempVaultDir, "_reading_sources.json"), "utf-8"));
+      expect(registry.items[0].priority).toBe("high");
+    } finally {
+      await rm(tempVaultDir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a path-traversal fileName", async () => {
+    const tempVaultDir = await mkdtemp(join(tmpdir(), "reading-digest-"));
+    try {
+      const ok = await setNotePriority(tempVaultDir, "../../etc/passwd", "high");
+      expect(ok).toBe(false);
     } finally {
       await rm(tempVaultDir, { recursive: true, force: true });
     }

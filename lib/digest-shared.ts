@@ -1,9 +1,12 @@
+export type Priority = "high" | "normal" | "low";
+
 export type RecentNote = {
   fileName: string;
   title: string;
   sourceKind: string | null;
   source: string | null;
   status: string | null;
+  priority: Priority | null;
   intakeAt: string | null;
   mtimeMs: number;
 };

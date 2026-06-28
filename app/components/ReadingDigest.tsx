@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { DigestPaper, RecentNote, TodayDigest } from "@/lib/digest";
-import type { IntakeItem } from "@/lib/digest-shared";
+import type { IntakeItem, Priority } from "@/lib/digest-shared";
 import DigestSubmitBar from "./DigestSubmitBar";
 import DigestIntakeSection from "./DigestIntakeSection";
 import DigestTodaySection from "./DigestTodaySection";
@@ -199,6 +199,22 @@ export default function ReadingDigest() {
     setBatchIds(next);
   }, [seenIds, batchIds, today.papers]);
 
+  // Library caret controls: optimistically recolor the row, then persist to the
+  // note's frontmatter (+ registry) and refresh.
+  const handleSetNotePriority = useCallback(
+    (fileName: string, priority: Priority) => {
+      setRecent((prev) => prev.map((note) => (note.fileName === fileName ? { ...note, priority } : note)));
+      void fetch("/api/digest/note-priority", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName, priority })
+      })
+        .then(refresh)
+        .catch(() => undefined);
+    },
+    [refresh]
+  );
+
   const handleFeedback = useCallback((itemId: string, vote: Vote) => {
     let sent: Vote | "clear" = vote;
     setVotes((prev) => {
@@ -241,7 +257,7 @@ export default function ReadingDigest() {
         generating={generating}
         votes={votes}
       />
-      <DigestRecentSection notes={recent} vaultName={VAULT_NAME} />
+      <DigestRecentSection notes={recent} vaultName={VAULT_NAME} onSetPriority={handleSetNotePriority} />
     </div>
   );
 }

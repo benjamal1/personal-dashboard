@@ -3,8 +3,8 @@ import { join, resolve, sep } from "node:path";
 
 import matter from "gray-matter";
 
-import { isReadStatus, type RecentNote } from "./digest-shared";
-export type { RecentNote };
+import { isReadStatus, type Priority, type RecentNote } from "./digest-shared";
+export type { Priority, RecentNote };
 export { isReadStatus };
 
 export type TodayEntry = {
@@ -255,6 +255,7 @@ export async function getTodayDigest(vaultDir: string): Promise<TodayDigest> {
 
 type NoteFrontmatter = {
   status: string | null;
+  priority: Priority | null;
   tags: string[];
   feedback: string | null;
   title: string | null;
@@ -302,8 +303,11 @@ export async function readNoteFrontmatter(filePath: string): Promise<NoteFrontma
 
   const { data } = matter(raw);
 
+  const fmPriority = typeof data.priority === "string" ? (data.priority as Priority) : null;
+
   return {
     status: typeof data.status === "string" ? data.status : null,
+    priority: fmPriority && PRIORITIES.has(fmPriority) ? fmPriority : null,
     tags: Array.isArray(data.tags) ? data.tags.filter((tag): tag is string => typeof tag === "string") : [],
     feedback: typeof data.feedback === "string" && data.feedback.length > 0 ? data.feedback : null,
     title: typeof data.title === "string" ? data.title : null,
@@ -343,6 +347,7 @@ export async function getRecentNotes(vaultDir: string, limit: number): Promise<R
           frontmatter?.sourceKind ?? null
         ),
         status: frontmatter?.status ?? null,
+        priority: frontmatter?.priority ?? null,
         intakeAt: frontmatter?.intakeAt ?? null,
         mtimeMs: stats.mtimeMs
       };
@@ -358,8 +363,6 @@ export async function getRecentNotes(vaultDir: string, limit: number): Promise<R
     })
     .slice(0, limit);
 }
-
-export type Priority = "high" | "normal" | "low";
 
 // 👍/👎 on a recommendation maps to the registry item's priority, which the
 // recommender already scores (+0.3 / -0.2). No prompt-logic change needed.
@@ -392,6 +395,71 @@ export async function setItemPriority(
 
   await writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`, "utf-8");
   return true;
+}
+
+// Set a Library note's priority from the dashboard: rewrite the note's own
+// frontmatter `priority:` (this is what colours the row) and mirror it into the
+// registry (what the recommender scores off). Frontmatter is the source of truth
+// for the colour so the change shows immediately.
+export async function setNotePriority(
+  vaultDir: string,
+  fileName: string,
+  priority: Priority
+): Promise<boolean> {
+  const notePath = resolveNotePath(vaultDir, fileName);
+  if (!notePath) {
+    return false;
+  }
+
+  let raw: string;
+  try {
+    raw = await readFile(notePath, "utf-8");
+  } catch {
+    return false;
+  }
+
+  // Targeted rewrite of the frontmatter `priority:` line (generated notes have
+  // one). Avoids gray-matter re-stringify, which would reformat every fm value.
+  const line = `priority: "${priority}"`;
+  let updated: string;
+  if (/^priority:.*$/m.test(raw)) {
+    updated = raw.replace(/^priority:.*$/m, line);
+  } else if (raw.startsWith("---\n")) {
+    updated = raw.replace(/^---\n/, `---\n${line}\n`);
+  } else {
+    return false; // no frontmatter to update
+  }
+
+  await writeFile(notePath, updated, "utf-8");
+  await syncRegistryPriorityByNote(vaultDir, fileName, priority);
+  return true;
+}
+
+// Best-effort: align the registry item (matched by note path) with the note's
+// new priority. Never throws — the note frontmatter is already the source of truth.
+async function syncRegistryPriorityByNote(
+  vaultDir: string,
+  fileName: string,
+  priority: Priority
+): Promise<void> {
+  const registryPath = join(vaultDir, "_reading_sources.json");
+  try {
+    const registry = JSON.parse(await readFile(registryPath, "utf-8"));
+    const items = Array.isArray(registry.items) ? (registry.items as Array<Record<string, unknown>>) : null;
+    if (!items) return;
+
+    const item = items.find((entry) => {
+      const rel = str(entry.note_relpath);
+      return rel === `Notes/${fileName}.md` || rel.endsWith(`/${fileName}.md`) || rel === `${fileName}.md`;
+    });
+    if (!item) return;
+
+    item.priority = priority;
+    item.updated_at = new Date().toISOString();
+    await writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`, "utf-8");
+  } catch {
+    // registry missing/unreadable — the note frontmatter update still stands
+  }
 }
 
 export async function submitPaper(webhookUrl: string, input: string): Promise<unknown> {
