@@ -20,13 +20,13 @@ See: .planning/PROJECT.md (onboarded 2026-06-18)
 
 ## Current Position
 
-Phase: 1 of 3 — NOT STARTED (Reading Digest Stabilization)
-Plan: none yet — run `/gsd-plan-phase 1` to plan, or track via the reading-digest sub-project docs
-Status: Project onboarded into GSD on 2026-06-18. Root `.planning/` + `CLAUDE.md` + sub-project convention established. Phase 0 baseline (home/tasks/usage views, persistence, systemd) is live.
-Last activity: 2026-06-18 — onboarded via /onboard-project; folded project-context.md + docs/superpowers into planning; registered reading-digest as first sub-project.
+Phase: 1 of 3 — IN PROGRESS, not formally verified (Reading Digest Stabilization)
+Plan: tracked ad-hoc via the reading-digest sub-project docs; run `/gsd-plan-phase 1` if you want a formal plan/verify pass before marking complete.
+Status: The core stabilization blocker is fixed — manual paper adds were failing ("Couldn't resolve / timed out") because headless Claude launches inherited the `opus[1m]` global default and booted too slowly for the launcher's working-detector. Fixed in `bj-agent-os/orchestration/scripts/n8n-claude-launch.sh` (robust detector, wider boot window, pinned `--model sonnet`). Plus digest UX shipped: note-papers dropped from Today, button-only recommendation cycling, priority colors on Today + Library, Library caret controls writing priority to the vault.
+Last activity: 2026-06-28 — resolver timeout root-caused + fixed; digest UI features shipped and deployed (main `0f6e5c8`, pushed). Verified end-to-end (arXiv resolve via real webhook, APIs serving priority).
 
 ## Notes
 
-- Uncommitted frontend WIP exists in the main checkout (`lib/digest.ts`, `app/components/DigestRecentSection.tsx`, `lib/digest-shared.ts`) — owner's active edits, intentionally NOT part of onboarding commits.
-- This onboarding was done in a git worktree; only planning/docs/CLAUDE.md are committed.
-- Reading-digest troubleshooting + n8n verification tracked separately (see `reading-digest/docs/TROUBLESHOOTING.md`).
+- The earlier "uncommitted frontend WIP" is now committed/superseded by the 2026-06-28 digest work on `main`.
+- Reading-digest troubleshooting log updated: `reading-digest/docs/TROUBLESHOOTING.md` (resolver timeout section).
+- Phase 1 not yet run through GSD verify — status above is the real shipped state, but the phase is not formally closed.
